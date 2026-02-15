@@ -1,377 +1,176 @@
 # Qwen-semble - TTS Voice Studio
 
-A powerful desktop application for voice cloning, voice design, and multi-voice transcript narration powered by Qwen3-TTS models.
+*Because manually recording audiobooks is like writing code in assembly – technically possible, but why would you?*
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/python-3.12+-brightgreen)
 
-## Features
+<!-- ![App Screenshot](INSERT_IMAGE_URL_HERE) -->
 
-### 🎙️ Voice Cloning
-- Clone any voice from a 3-60 second audio sample
-- Save cloned voices to a persistent library for reuse
-- X-Vector mode for quick cloning without transcripts
-- Support for multiple audio formats (WAV, MP3, FLAC, OGG, M4A)
+A powerful desktop application for **voice cloning**, **voice design**, and **multi-voice narration** powered by Alibaba's Qwen3-TTS models. Clone any voice from a short audio sample, create custom voices from text descriptions, or generate professional narrations with multiple voices.
 
-### 🎨 Voice Design
-- Create custom voices from natural language descriptions
-- Example: "Young female voice, cheerful and energetic, slightly high pitch"
-- Test voices with custom text before saving
-- Save designed voices to library with metadata
+<!-- ![App Screenshot](INSERT_IMAGE_URL_HERE) -->
 
-### 📖 Multi-Voice Narration
-- Generate narrations from plain text transcripts
-- Three voice assignment modes:
-  - **Single Voice**: One voice narrates entire transcript
-  - **Manual Multi-Voice**: Assign voices to individual sentences
-  - **Annotated Format**: Use `[Speaker: Name]` tags in transcript
-- Automatic speaker detection from annotations
-- Merge segments into single audio file or save separately
-- Progress tracking with cancellation support
+A powerful desktop application for **voice cloning**, **voice design**, and **multi-voice narration** powered by Alibaba's Qwen3-TTS models. Clone any voice from a short audio sample, create custom voices from text descriptions, or generate professional narrations with multiple voices.
 
-### 💾 Voice Library
-- Persistent storage for cloned and designed voices
-- Name and tag voices for easy organization
-- Load, play, and delete voices
-- Export/import voice profiles (planned)
+**🔗 Repository**: https://github.com/AdamMoses-GitHub/Qwen-semble
 
-### ⚙️ Advanced Configuration
-- CPU or GPU execution (CUDA support)
-- Model size selection (0.6B or 1.7B parameters)
-- FlashAttention 2 for GPU memory optimization
-- Customizable generation parameters (temperature, top_p, max_tokens)
-- HuggingFace token management for model downloads
-- Light/Dark/System theme support
+---
 
-## Requirements
+## About
 
-- **Python**: 3.12 or higher
-- **Operating System**: Windows (tested), Linux, macOS (should work)
-- **Hardware**:
-  - **CPU Mode**: Any modern CPU with 8GB+ RAM
-  - **GPU Mode**: NVIDIA GPU with 8GB+ VRAM (16GB+ recommended for 1.7B model)
-  - **Storage**: 10GB+ free space for models and outputs
+### The Problem
+Recording narrations, audiobooks, or multi-voice content is time-consuming and expensive. You need voice actors, recording equipment, studios, and hours of post-production. Consistency across recording sessions is nearly impossible.
 
-## Installation
+### The Solution
+Qwen-semble lets you clone any voice from a 3-60 second sample, design custom voices from text descriptions, and generate professional multi-voice narrations – all on your local machine with state-of-the-art AI models.
 
-### 1. Clone the Repository
+---
 
-```bash
-git clone https://github.com/yourusername/Qwen-semble.git
-cd Qwen-semble
-```
+## What It Does
 
-### 2. Create Virtual Environment (Recommended)
+### The Main Features
 
-```bash
-# Using conda
-conda create -n qwen-tts python=3.12 -y
-conda activate qwen-tts
+🎙️ **Voice Cloning** - Clone any voice from a short audio sample  
+🎨 **Voice Design** - Create custom voices from natural language descriptions  
+📖 **Multi-Voice Narration** - Generate narrations with multiple distinct voices  
+💾 **Voice Library** - Save and organize your cloned and designed voices  
+⚙️ **Flexible Configuration** - CPU or GPU, multiple model sizes, advanced tuning
 
-# Or using venv
-python -m venv venv
-# Windows:
-venv\Scripts\activate
-# Linux/macOS:
-source venv/bin/activate
-```
+### The Nerdy Stuff
 
-### 3. Install Dependencies
+✨ **State-of-the-Art Models** - Powered by Qwen3-TTS (Alibaba Cloud)  
+🚀 **GPU Acceleration** - CUDA support with FlashAttention optimization  
+🎯 **Zero-Dependency Voice Clone** - X-Vector mode requires no transcript  
+🌍 **Multilingual** - 11 languages including Chinese, English, Japanese, Korean  
+💻 **100% Local** - All processing happens on your machine, private by design
 
-**Option A: GPU Version (Recommended for NVIDIA GPUs with CUDA 12.1+)**
-
-Windows:
-```bash
-# Run automated installer
-install-gpu.bat
-```
-
-Manual installation:
-```bash
-# Step 1: Install PyTorch with CUDA support
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
-
-# Step 2: Install other dependencies
-pip install -r requirements-gpu.txt
-
-# Step 3 (Optional): Install Flash Attention for better GPU performance
-pip install flash-attn --no-build-isolation
-```
-
-**Option B: CPU Version (No GPU required)**
-
-Windows:
-```bash
-# Run automated installer
-install-cpu.bat
-```
-
-Manual installation:
-```bash
-pip install -r requirements-cpu.txt
-```
-
-**Verify CUDA is available (GPU version only):**
-```bash
-python -c "import torch; print(f'CUDA Available: {torch.cuda.is_available()}')"
-```
+---
 
 ## Quick Start
 
-### Running the Application
+### TL;DR Installation
 
 ```bash
+# Clone the repo
+git clone https://github.com/yourusername/Qwen-semble.git
+cd Qwen-semble
+
+# GPU users (Windows):
+install-gpu.bat
+
+# CPU users (Windows):
+install-cpu.bat
+
+# Run it
 python src/main.py
 ```
 
-On first launch, the application will:
-1. Download required Qwen3-TTS models from HuggingFace (~7GB for 1.7B model)
-2. Initialize the TTS engine
-3. Open the main window
+**📖 Full Installation Guide**: See [INSTALL.md](INSTALL.md) for detailed instructions, troubleshooting, and platform-specific setup.
 
-### First-Time Setup
+**First launch downloads ~7GB of AI models** (one-time, takes 10-30 min depending on internet speed)
 
-1. **Configure Device** (Settings tab):
-   - Select GPU if available, or CPU for compatibility
-   - Choose model size (1.7B for best quality, 0.6B for speed)
+---
 
-2. **(Optional) Add HuggingFace Token** (Settings tab):
-   - Required for downloading models on first run
-   - Get token at: https://huggingface.co/settings/tokens
-   - Paste token and click "Save Token"
+## Tech Stack
 
-## Usage Guide
+| Component | Purpose | Why This One |
+|-----------|---------|--------------|
+| **Qwen3-TTS** | Voice synthesis engine | State-of-the-art quality, multilingual, local processing |
+| **PyTorch** | Deep learning framework | Industry standard, CUDA support, model compatibility |
+| **CustomTkinter** | GUI framework | Modern UI, cross-platform, Python-native |
+| **Transformers** | Model loading & inference | HuggingFace ecosystem, easy model management |
+| **SoundFile/SoundDevice** | Audio I/O | Format support, low-latency playback |
 
-### Voice Cloning
+---
 
-1. **Select Reference Audio**:
-   - Click "Browse..." to select an audio file (3-60 seconds recommended)
-   - Supported formats: WAV, MP3, FLAC, OGG, M4A
+## System Requirements
 
-2. **Enter Reference Transcript**:
-   - Type what is said in the reference audio
-   - Or enable "X-Vector Only Mode" to skip (lower quality)
+**Minimum (CPU Mode)**:
+- Python 3.12+
+- 8GB RAM
+- 10GB disk space
+- Any modern CPU
 
-3. **Enter Text to Generate**:
-   - Type the text you want spoken in the cloned voice
-   - Select target language (or "Auto")
+**Recommended (GPU Mode)**:
+- Python 3.12+
+- 16GB RAM
+- NVIDIA GPU with 8GB+ VRAM
+- CUDA 12.1+
+- 15GB disk space
 
-4. **Generate**:
-   - Click "Generate Speech"
-   - Wait for processing (may take 10-60 seconds)
-   - Listen to result with "Play Result" button
+**Supported OS**: Windows (tested), Linux, macOS
 
-5. **Save** (optional):
-   - "Save Audio" - Export as WAV file
-   - "Save to Voice Library" - Reuse voice later with custom name/tags
+---
 
-### Voice Design
+## Usage
 
-1. **Describe Voice**:
-   - Write a natural language description of the voice you want
-   - Click "Load Example Prompt" for inspiration
+For complete usage instructions, workflows, and best practices, see **[USAGE.md](USAGE.md)**.
 
-2. **Enter Test Text**:
-   - Provide sample text to test the designed voice
-   - Select language
+### Quick Examples
 
-3. **Generate Voice**:
-   - Click "Generate Voice"
-   - Listen to result and iterate on description if needed
+**Clone a voice:**
+1. Voice Clone tab → Select audio file (3-60 sec)
+2. Enter transcript of what was said
+3. Type new text → Generate
 
-4. **Save to Library**:
-   - Save successful designs for reuse
+**Design a voice:**
+1. Voice Design tab → Describe voice: "Young male, confident, slightly deep"
+2. Enter test text → Generate Voice
 
-### Multi-Voice Narration
+**Multi-voice narration:**
+1. Narration tab → Load transcript with `[Speaker]` tags
+2. Select "annotated" mode → Parse
+3. Generate Narration
 
-#### Single Voice Mode
+---
 
-1. Load transcript (.txt file) or paste text
-2. Select "single" mode
-3. Choose voice from dropdown
-4. Click "Parse Transcript"
-5. Click "Generate Narration"
+## Documentation
 
-#### Manual Multi-Voice Mode
+- **[INSTALL.md](INSTALL.md)** - Complete installation guide
+- **[USAGE.md](USAGE.md)** - User guide, workflows, best practices
+- **[LICENSE](LICENSE)** - MIT License
 
-1. Load transcript
-2. Select "manual" mode
-3. Click "Parse Transcript" - transcript splits into sentences
-4. Assign voice to each sentence in right panel
-5. Click "Generate Narration"
-
-#### Annotated Format Mode
-
-1. Prepare transcript with speaker tags:
-   ```
-   [Ryan] Hello, how are you today?
-   [Vivian] I'm doing great, thanks for asking!
-   [Ryan] That's wonderful to hear.
-   ```
-
-2. Load transcript
-3. Select "annotated" mode
-4. Click "Parse Transcript" - speakers auto-detected
-5. Click "Generate Narration"
-
-Generated narrations are saved to `output/narrations/narration_YYYYMMDD_HHMMSS/`
-
-## Configuration
-
-### Config Files
-
-- `config/app_config.json` - Application settings
-- `config/voice_library.json` - Saved voices metadata
-
-### Output Directory Structure
-
-```
-output/
-├── cloned_voices/          # Saved cloned voices
-├── designed_voices/        # Saved designed voices
-├── narrations/            # Generated narrations
-│   └── narration_YYYYMMDD_HHMMSS/
-│       └── narration_full.wav
-├── temp/                  # Temporary files
-└── logs/                  # Application logs
-    └── app.log
-```
-
-## Troubleshooting
-
-### Models Won't Download
-
-**Problem**: "Failed to download model" error
-
-**Solutions**:
-- Check internet connection
-- Add HuggingFace token in Settings if model requires authentication
-- Try again - sometimes HuggingFace servers are temporarily unavailable
-
-### GPU Out of Memory
-
-**Problem**: "CUDA out of memory" error
-
-**Solutions**:
-1. Switch to CPU mode in Settings (slower but works)
-2. Use 0.6B model instead of 1.7B
-3. Close other GPU-using applications
-4. Reduce text length for generation
-
-### Audio File Not Supported
-
-**Problem**: "Unsupported audio format" error
-
-**Solutions**:
-- Convert audio to WAV, MP3, or FLAC format
-- Ensure sample rate is at least 16kHz
-- Check that audio is between 1-120 seconds
-
-### Generation is Slow
-
-**Problem**: Audio generation takes minutes
-
-**Expected Behavior**:
-- **GPU (1.7B model)**: 2-10 seconds for short text
-- **GPU (0.6B model)**: 1-5 seconds for short text
-- **CPU (1.7B model)**: 30-120 seconds for short text
-- **CPU (0.6B model)**: 15-60 seconds for short text
-
-**Solutions**:
-- Use GPU if available
-- Use 0.6B model for faster generation
-- Check no other processes are using GPU/CPU
-
-### Application Crashes on Startup
-
-**Problem**: Application closes immediately or shows errors
-
-**Solutions**:
-1. Check Python version (requires 3.12+):
-   ```bash
-   python --version
-   ```
-
-2. Reinstall dependencies:
-   ```bash
-   # For GPU version:
-   pip install -r requirements-gpu.txt --force-reinstall
-   # For CPU version:
-   pip install -r requirements-cpu.txt --force-reinstall
-   ```
-
-3. Check logs:
-   ```
-   output/logs/app.log
-   ```
-
-4. Try CPU mode by editing `config/app_config.json`:
-   ```json
-   {
-     "device": "cpu",
-     ...
-   }
-   ```
-
-## Supported Languages
-
-- Chinese (including dialects: Beijing, Sichuan)
-- English
-- Japanese
-- Korean
-- German
-- French
-- Russian
-- Portuguese
-- Spanish
-- Italian
-
-## Models Used
-
-- **Qwen3-TTS-12Hz-1.7B-CustomVoice** - Preset speaker voices
-- **Qwen3-TTS-12Hz-1.7B-VoiceDesign** - Voice creation from descriptions
-- **Qwen3-TTS-12Hz-1.7B-Base** - Voice cloning
-- **Qwen3-TTS-Tokenizer-12Hz** - Audio encoding/decoding
-
-Models are automatically downloaded from HuggingFace on first use.
+---
 
 ## Contributing
 
-Contributions are welcome! Areas for improvement:
+Contributions welcome! Areas where you can help:
 
-- [ ] Add support for DOCX/PDF transcript formats
-- [ ] Implement voice profile export/import
-- [ ] Add audio format conversion (MP3 export)
-- [ ] Integration with Whisper for auto-transcription
-- [ ] Batch processing for multiple transcripts
-- [ ] Real-time streaming generation
-- [ ] Speaker diarization for automatic voice assignment
+- 📄 Add DOCX/PDF transcript support
+- 💾 Voice profile export/import
+- 🎵 MP3 export support
+- 🎤 Whisper integration for auto-transcription
+- ⚡ Batch processing for multiple files
+- 🔊 Real-time streaming generation
+
+---
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License - See [LICENSE](LICENSE) for details.
+
+Copyright © 2026 Adam Moses
+
+---
 
 ## Acknowledgments
 
-- **Qwen Team** at Alibaba Cloud for the amazing [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) models
-- **CustomTkinter** for the modern GUI framework
-- **HuggingFace** for model hosting and transformers library
+- **[Qwen Team](https://github.com/QwenLM/Qwen3-TTS)** at Alibaba Cloud for the incredible Qwen3-TTS models
+- **[CustomTkinter](https://github.com/TomSchimansky/CustomTkinter)** for the modern GUI framework
+- **[HuggingFace](https://huggingface.co/)** for model hosting and transformers library
+
+---
 
 ## Support
 
-For issues, questions, or feature requests:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Review documentation at [QwenLM/Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS)
+**Need help?**
+- 📖 Read [USAGE.md](USAGE.md) for tutorials
+- 🐛 [Open an issue](https://github.com/yourusername/Qwen-semble/issues)
+- 💬 Check existing issues for solutions
 
-## Changelog
+---
 
-### Version 1.0.0 (2026-02-14)
-- Initial release
-- Voice cloning with library management
-- Voice design from text descriptions
-- Multi-voice narration (single, manual, annotated modes)
-- CPU/GPU support with model size selection
-- CustomTkinter modern GUI
-- Comprehensive settings and configuration
+<sub>Keywords: voice cloning, text-to-speech, TTS, voice synthesis, voice design, multi-voice narration, audiobook generation, Qwen3-TTS, speech generation, voice AI, local TTS, CUDA acceleration, Python TTS, voice library, speaker cloning, custom voice, narration generator, audio synthesis, deep learning voice, AI voice studio</sub>
+
