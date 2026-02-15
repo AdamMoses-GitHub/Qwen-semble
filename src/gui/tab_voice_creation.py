@@ -187,11 +187,9 @@ class VoiceCreationTab(ctk.CTkFrame):
         # Reset UI state
         self.generate_test_button.configure(state="disabled")
         self.save_voice_button.configure(state="disabled")
-        for btn in self.template_buttons:
-            btn.configure(state="disabled")
         
-        # Stop audio playback but don't clear loaded audio
-        self.test_audio_player.stop()
+        # Rebuild test audio list (will be empty after reset)
+        self._rebuild_test_audio_list()
         
         # Stop any running workers
         if self.current_worker:
@@ -427,7 +425,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         panel = ctk.CTkFrame(parent)
         panel.grid(row=0, column=0, sticky="nsew", padx=5, pady=(5, 2))
         panel.columnconfigure(0, weight=1)
-        # No row weight - let content flow naturally from top
+        panel.rowconfigure(7, weight=1)  # Test audio list expands
         
         # Title
         title = ctk.CTkLabel(panel, text="🎧 Test Voice Model", font=("Arial", 16, "bold"))
@@ -450,10 +448,10 @@ class VoiceCreationTab(ctk.CTkFrame):
         )
         load_test_btn.grid(row=3, column=0, pady=5)
         
-        # Generate test button
+        # Add test button (renamed from Generate)
         self.generate_test_button = ctk.CTkButton(
             panel,
-            text="🎙️ Generate Test Speech",
+            text="Add Test Speech",
             command=self._generate_test_speech,
             height=40,
             font=("Arial", 13, "bold"),
@@ -461,29 +459,18 @@ class VoiceCreationTab(ctk.CTkFrame):
         )
         self.generate_test_button.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
         
-        # Audio player
-        self.test_audio_player = AudioPlayerWidget(panel)
-        self.test_audio_player.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
+        # Visual divider
+        divider = ctk.CTkFrame(panel, height=2, fg_color="gray40")
+        divider.grid(row=5, column=0, sticky="ew", padx=10, pady=(15, 10))
         
-        # Template test buttons
-        template_label = ctk.CTkLabel(panel, text="Template Tests:", font=("Arial", 11, "bold"))
-        template_label.grid(row=6, column=0, sticky="w", padx=10, pady=(10, 5))
+        # Test Audio section
+        test_audio_label = ctk.CTkLabel(panel, text="Test Audio:", font=("Arial", 11, "bold"))
+        test_audio_label.grid(row=6, column=0, sticky="w", padx=10, pady=(5, 5))
         
-        template_frame = ctk.CTkFrame(panel)
-        template_frame.grid(row=7, column=0, sticky="ew", padx=10, pady=(0, 10))
-        template_frame.columnconfigure(0, weight=1)
-        
-        self.template_buttons = []
-        for i in range(3):
-            btn = ctk.CTkButton(
-                template_frame,
-                text=f"▶ Template Test {i+1}",
-                command=lambda idx=i: self._play_template_test(idx),
-                state="disabled",
-                height=30
-            )
-            btn.grid(row=i, column=0, sticky="ew", padx=5, pady=2)
-            self.template_buttons.append(btn)
+        # Scrollable frame for test audio list
+        self.test_audio_scroll = ctk.CTkScrollableFrame(panel, height=200)
+        self.test_audio_scroll.grid(row=7, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.test_audio_scroll.columnconfigure(0, weight=1)
     
     def _create_save_panel(self, parent) -> None:
         """Create save voice model section (bottom of right panel)."""
@@ -522,6 +509,106 @@ class VoiceCreationTab(ctk.CTkFrame):
         )
         self.save_voice_button.grid(row=5, column=0, sticky="ew", padx=10, pady=(15, 10))
     
+    def _rebuild_test_audio_list(self) -> None:
+        """Rebuild the test audio list with templates and custom tests."""
+        # Clear existing rows
+        for widget in self.test_audio_scroll.winfo_children():
+            widget.destroy()
+        
+        # Get template texts from config
+        template_texts = self.config.get("template_test_transcripts", [
+            "I am a voice model. I was created using the magic of computing.",
+            "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
+            "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+        ])
+        
+        row = 0
+        
+        # Add template tests first
+        for idx in sorted(self.template_test_audios.keys()):
+            template_text = template_texts[idx] if idx < len(template_texts) else f"Template Test {idx+1}"
+            preview_text = template_text[:50] + "..." if len(template_text) > 50 else template_text
+            
+            test_frame = ctk.CTkFrame(self.test_audio_scroll)
+            test_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
+            test_frame.columnconfigure(0, weight=1)
+            
+            label = ctk.CTkLabel(
+                test_frame,
+                text=f"Template: {preview_text}",
+                anchor="w"
+            )
+            label.pack(side="left", padx=5, fill="x", expand=True)
+            
+            play_btn = ctk.CTkButton(
+                test_frame,
+                text="▶ Play",
+                command=lambda i=idx: self._play_test_audio(i, is_template=True),
+                width=80
+            )
+            play_btn.pack(side="right", padx=5)
+            
+            row += 1
+        
+        # Add custom tests
+        for idx, custom_test in enumerate(self.custom_test_audios):
+            test_text = custom_test["text"]
+            preview_text = test_text[:50] + "..." if len(test_text) > 50 else test_text
+            
+            test_frame = ctk.CTkFrame(self.test_audio_scroll)
+            test_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
+            test_frame.columnconfigure(0, weight=1)
+            
+            label = ctk.CTkLabel(
+                test_frame,
+                text=f"Custom: {preview_text}",
+                anchor="w"
+            )
+            label.pack(side="left", padx=5, fill="x", expand=True)
+            
+            play_btn = ctk.CTkButton(
+                test_frame,
+                text="▶ Play",
+                command=lambda i=idx: self._play_test_audio(i, is_template=False),
+                width=80
+            )
+            play_btn.pack(side="right", padx=5)
+            
+            row += 1
+    
+    def _play_test_audio(self, index: int, is_template: bool) -> None:
+        """Play a test audio from the list.
+        
+        Args:
+            index: Index of the test
+            is_template: True for template test, False for custom test
+        """
+        try:
+            from core.audio_utils import AudioPlayer
+            
+            if is_template:
+                if index in self.template_test_audios:
+                    audio, sr = self.template_test_audios[index]
+                    # Create temporary player for playback
+                    player = AudioPlayer()
+                    player.play(audio, sr)
+                    logger.info(f"Playing template test {index+1}")
+                else:
+                    logger.warning(f"Template test {index+1} not available")
+            else:
+                if index < len(self.custom_test_audios):
+                    custom_test = self.custom_test_audios[index]
+                    audio = custom_test["audio"]
+                    sr = custom_test["sr"]
+                    # Create temporary player for playback
+                    player = AudioPlayer()
+                    player.play(audio, sr)
+                    logger.info(f"Playing custom test: {custom_test['text'][:50]}...")
+                else:
+                    logger.warning(f"Custom test {index+1} not available")
+        except Exception as e:
+            logger.error(f"Failed to play test audio: {e}")
+    
     # ========== Clone Mode Methods ==========
     
     def _on_audio_selected(self, filepath: str) -> None:
@@ -548,9 +635,10 @@ class VoiceCreationTab(ctk.CTkFrame):
         """Play reference audio (clone mode)."""
         if self.ref_audio_path:
             try:
+                from core.audio_utils import AudioPlayer
                 audio, sr = load_audio(self.ref_audio_path)
-                self.test_audio_player.load_audio(audio, sr)
-                self.test_audio_player.play()
+                player = AudioPlayer()
+                player.play(audio, sr)
             except Exception as e:
                 show_error_dialog(e, "playing reference audio", self)
     
@@ -689,8 +777,9 @@ class VoiceCreationTab(ctk.CTkFrame):
             # Enable test and save buttons
             self.generate_test_button.configure(state="normal")
             self.save_voice_button.configure(state="normal")
-            for btn in self.template_buttons:
-                btn.configure(state="normal")
+            
+            # Rebuild test audio list to show templates
+            self._rebuild_test_audio_list()
             
             # Reset UI
             self._reset_model_ui()
@@ -787,14 +876,12 @@ class VoiceCreationTab(ctk.CTkFrame):
             """Handle success."""
             self.sample_audio, self.sample_sr, self.template_test_audios = result
             
-            # Load sample audio into player (but don't auto-play)
-            self.test_audio_player.load_audio(self.sample_audio, self.sample_sr)
-            
             # Enable test and save buttons
             self.generate_test_button.configure(state="normal")
             self.save_voice_button.configure(state="normal")
-            for btn in self.template_buttons:
-                btn.configure(state="normal")
+            
+            # Rebuild test audio list to show templates
+            self._rebuild_test_audio_list()
             
             # Reset UI
             self._reset_model_ui()
@@ -863,8 +950,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         def on_success(result):
             """Handle success."""
             self.test_audio, self.test_sr = result
-            self.test_audio_player.load_audio(self.test_audio, self.test_sr)
-            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
+            self.generate_test_button.configure(state="normal", text="Add Test Speech")
             # Save custom test if text is unique
             self._save_custom_test(test_text, self.test_audio, self.test_sr)
             logger.info("Test speech generated successfully")
@@ -872,7 +958,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         def on_error(error):
             """Handle error."""
             show_error_dialog(error, "generating test speech", self)
-            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
+            self.generate_test_button.configure(state="normal", text="Add Test Speech")
         
         worker = TTSWorker(
             generate_task,
@@ -904,8 +990,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         def on_success(result):
             """Handle success."""
             self.test_audio, self.test_sr = result
-            self.test_audio_player.load_audio(self.test_audio, self.test_sr)
-            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
+            self.generate_test_button.configure(state="normal", text="Add Test Speech")
             # Save custom test if text is unique
             self._save_custom_test(test_text, self.test_audio, self.test_sr)
             logger.info("Test speech generated successfully")
@@ -913,7 +998,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         def on_error(error):
             """Handle error."""
             show_error_dialog(error, "generating test speech", self)
-            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
+            self.generate_test_button.configure(state="normal", text="Add Test Speech")
         
         worker = TTSWorker(
             generate_task,
@@ -961,18 +1046,11 @@ class VoiceCreationTab(ctk.CTkFrame):
             
             logger.info(f"Saved custom test audio ({len(self.custom_test_audios)} total): {test_text[:50]}...")
             
+            # Rebuild the test audio list to show the new custom test
+            self._rebuild_test_audio_list()
+            
         except Exception as e:
             logger.error(f"Failed to save custom test audio: {e}")
-    
-    def _play_template_test(self, index: int) -> None:
-        """Play a template test audio (shared)."""
-        if index in self.template_test_audios:
-            audio, sr = self.template_test_audios[index]
-            self.test_audio_player.load_audio(audio, sr)
-            self.test_audio_player.play()
-            logger.info(f"Playing template test {index+1}")
-        else:
-            logger.warning(f"Template test {index+1} not available")
     
     def _save_voice_model(self) -> None:
         """Save voice model to library (branches by mode)."""

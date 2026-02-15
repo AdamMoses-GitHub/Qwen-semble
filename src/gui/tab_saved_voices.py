@@ -8,7 +8,6 @@ from typing import Optional, List
 
 from core.audio_utils import AudioPlayer
 from utils.error_handler import logger
-from gui.components import AudioPlayerWidget
 
 
 class SavedVoicesTab(ctk.CTkFrame):
@@ -299,6 +298,12 @@ class SavedVoicesTab(ctk.CTkFrame):
         Args:
             voice: Voice data dictionary
         """
+        # Stop any playing audio from previous voice before clearing widgets
+        try:
+            self.audio_player.stop()
+        except Exception:
+            pass  # Ignore if already stopped
+        
         # Clear existing widgets
         for widget in self.details_content_frame.winfo_children():
             widget.destroy()
@@ -375,44 +380,24 @@ class SavedVoicesTab(ctk.CTkFrame):
             desc_text.insert("1.0", voice.get("description", ""))
             desc_text.configure(state="disabled")
         
-        # Audio preview
-        audio_frame = ctk.CTkFrame(self.details_content_frame)
-        audio_frame.pack(fill="x", pady=10)
-        
-        audio_title = ctk.CTkLabel(audio_frame, text="Audio Preview:", font=("Arial", 12, "bold"))
-        audio_title.pack(anchor="w", pady=5)
-        
-        # Get audio path
-        if voice["type"] == "cloned":
-            audio_path = voice.get("ref_audio", "")
-        else:
-            audio_path = voice.get("sample_audio", "")
-        
-        if audio_path and Path(audio_path).exists():
-            try:
-                # Load the audio file
-                from core.audio_utils import load_audio
-                audio_data, sample_rate = load_audio(audio_path)
-                
-                self.audio_widget = AudioPlayerWidget(audio_frame)
-                self.audio_widget.pack(fill="x", padx=10, pady=5)
-                self.audio_widget.load_audio(audio_data, sample_rate)
-            except Exception as e:
-                logger.error(f"Failed to load audio for preview: {e}")
-                error_label = ctk.CTkLabel(audio_frame, text=f"Error loading audio: {e}", text_color="red")
-                error_label.pack(padx=10, pady=5)
-        else:
-            no_audio_label = ctk.CTkLabel(audio_frame, text="Audio file not found", text_color="gray")
-            no_audio_label.pack(padx=10, pady=5)
-        
-        # Template Test Audio Files
+        # Test Audio Section (unified templates + custom tests)
         template_tests = voice.get("template_tests", [])
-        if template_tests:
-            template_frame = ctk.CTkFrame(self.details_content_frame)
-            template_frame.pack(fill="x", pady=10)
+        custom_tests = voice.get("custom_tests", [])
+        
+        # Only show section if there are any tests
+        if template_tests or custom_tests:
+            test_audio_frame = ctk.CTkFrame(self.details_content_frame)
+            test_audio_frame.pack(fill="both", expand=True, pady=10)
+            test_audio_frame.columnconfigure(0, weight=1)
             
-            template_title = ctk.CTkLabel(template_frame, text="Template Test Audio:", font=("Arial", 12, "bold"))
-            template_title.pack(anchor="w", pady=5)
+            # Title
+            test_audio_title = ctk.CTkLabel(test_audio_frame, text="Test Audio:", font=("Arial", 12, "bold"))
+            test_audio_title.pack(anchor="w", pady=(5, 5), padx=10)
+            
+            # Scrollable list for all test audio
+            test_audio_scroll = ctk.CTkScrollableFrame(test_audio_frame, height=200)
+            test_audio_scroll.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+            test_audio_scroll.columnconfigure(0, weight=1)
             
             # Get template texts from config
             template_texts = self.config.get("template_test_transcripts", [
@@ -421,72 +406,65 @@ class SavedVoicesTab(ctk.CTkFrame):
                 "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
             ])
             
-            # Create buttons for each template test
+            row = 0
+            
+            # Add template tests first
             for idx, test_path in enumerate(template_tests):
                 if Path(test_path).exists():
-                    # Create a frame for each test
-                    test_item_frame = ctk.CTkFrame(template_frame)
-                    test_item_frame.pack(fill="x", padx=10, pady=2)
-                    
-                    # Template text preview
                     template_text = template_texts[idx] if idx < len(template_texts) else f"Template Test {idx+1}"
-                    preview_text = template_text[:60] + "..." if len(template_text) > 60 else template_text
+                    preview_text = template_text[:50] + "..." if len(template_text) > 50 else template_text
                     
-                    test_label = ctk.CTkLabel(
-                        test_item_frame,
-                        text=f"Test {idx+1}: {preview_text}",
+                    test_frame = ctk.CTkFrame(test_audio_scroll)
+                    test_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
+                    test_frame.columnconfigure(0, weight=1)
+                    
+                    label = ctk.CTkLabel(
+                        test_frame,
+                        text=f"Template: {preview_text}",
                         anchor="w"
                     )
-                    test_label.pack(side="left", padx=5, fill="x", expand=True)
+                    label.pack(side="left", padx=5, fill="x", expand=True)
                     
-                    # Play button
                     play_btn = ctk.CTkButton(
-                        test_item_frame,
+                        test_frame,
                         text="▶ Play",
                         command=lambda path=test_path: self._play_template_test(path),
                         width=80
                     )
                     play_btn.pack(side="right", padx=5)
+                    
+                    row += 1
                 else:
                     logger.warning(f"Template test audio file not found: {test_path}")
-        
-        # Custom Test Audio Files
-        custom_tests = voice.get("custom_tests", [])
-        if custom_tests:
-            custom_frame = ctk.CTkFrame(self.details_content_frame)
-            custom_frame.pack(fill="x", pady=10)
             
-            custom_title = ctk.CTkLabel(custom_frame, text="Custom Test Audio:", font=("Arial", 12, "bold"))
-            custom_title.pack(anchor="w", pady=5)
-            
-            # Create buttons for each custom test
+            # Add custom tests
             for idx, custom_test in enumerate(custom_tests):
                 test_path = custom_test.get("audio_path", "")
                 test_text = custom_test.get("text", "")
                 
                 if Path(test_path).exists():
-                    # Create a frame for each test
-                    test_item_frame = ctk.CTkFrame(custom_frame)
-                    test_item_frame.pack(fill="x", padx=10, pady=2)
+                    preview_text = test_text[:50] + "..." if len(test_text) > 50 else test_text
                     
-                    # Custom text preview
-                    preview_text = test_text[:60] + "..." if len(test_text) > 60 else test_text
+                    test_frame = ctk.CTkFrame(test_audio_scroll)
+                    test_frame.grid(row=row, column=0, sticky="ew", padx=5, pady=2)
+                    test_frame.columnconfigure(0, weight=1)
                     
-                    test_label = ctk.CTkLabel(
-                        test_item_frame,
-                        text=f"Custom {idx+1}: {preview_text}",
+                    label = ctk.CTkLabel(
+                        test_frame,
+                        text=f"Custom: {preview_text}",
                         anchor="w"
                     )
-                    test_label.pack(side="left", padx=5, fill="x", expand=True)
+                    label.pack(side="left", padx=5, fill="x", expand=True)
                     
-                    # Play button
                     play_btn = ctk.CTkButton(
-                        test_item_frame,
+                        test_frame,
                         text="▶ Play",
                         command=lambda path=test_path: self._play_template_test(path),
                         width=80
                     )
                     play_btn.pack(side="right", padx=5)
+                    
+                    row += 1
                 else:
                     logger.warning(f"Custom test audio file not found: {test_path}")
         
@@ -564,13 +542,8 @@ class SavedVoicesTab(ctk.CTkFrame):
             if Path(audio_path).exists():
                 audio_data, sample_rate = load_audio(audio_path)
                 
-                # Use the existing audio widget if available, or create a temporary player
-                if hasattr(self, 'audio_widget') and self.audio_widget:
-                    self.audio_widget.load_audio(audio_data, sample_rate)
-                    self.audio_widget.play()
-                else:
-                    # Play using the audio player directly
-                    self.audio_player.play(audio_data, sample_rate)
+                # Play using the audio player directly
+                self.audio_player.play(audio_data, sample_rate)
                 
                 logger.info(f"Playing template test audio: {audio_path}")
             else:
@@ -578,6 +551,7 @@ class SavedVoicesTab(ctk.CTkFrame):
                 messagebox.showwarning("File Not Found", f"Template test audio file not found:\n{audio_path}")
         except Exception as e:
             logger.error(f"Failed to play template test audio: {e}")
+            # Don't show error dialog to user for playback errors, just log it
             messagebox.showerror("Playback Error", f"Failed to play template test audio:\n{e}")
     
     def _delete_voice(self, voice: dict) -> None:

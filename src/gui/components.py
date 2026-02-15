@@ -66,18 +66,28 @@ class AudioPlayerWidget(ctk.CTkFrame):
     def play(self) -> None:
         """Start playback."""
         if self.current_audio is not None and self.current_sr is not None:
-            self.play_button.configure(text="⏸ Stop")
-            self.status_label.configure(text="Playing...")
-            self.audio_player.play(
-                self.current_audio,
-                self.current_sr,
-                callback=self._on_playback_complete
-            )
+            try:
+                if not self.winfo_exists():
+                    return
+                self.play_button.configure(text="⏸ Stop")
+                self.status_label.configure(text="Playing...")
+                self.audio_player.play(
+                    self.current_audio,
+                    self.current_sr,
+                    callback=self._on_playback_complete
+                )
+            except Exception as e:
+                # Widget might have been destroyed
+                logger.error(f"Error during playback start: {e}")
     
     def stop(self) -> None:
         """Stop playback."""
-        self.audio_player.stop()
-        self._on_playback_complete()
+        try:
+            self.audio_player.stop()
+            self._on_playback_complete()
+        except Exception:
+            # Widget might have been destroyed
+            pass
     
     def _on_playback_complete(self) -> None:
         """Handle playback completion."""
