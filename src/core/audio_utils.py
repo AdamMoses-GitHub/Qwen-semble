@@ -13,6 +13,10 @@ from utils.error_handler import AudioValidationError, logger
 class AudioPlayer:
     """Audio playback manager with state control."""
     
+    # Class-level registry to track all instances
+    _all_players = []
+    _registry_lock = threading.Lock()
+    
     def __init__(self):
         """Initialize audio player."""
         self.is_playing_flag = False
@@ -20,6 +24,18 @@ class AudioPlayer:
         self.current_sr = None
         self.stop_event = threading.Event()
         self.playback_thread = None
+        
+        # Register this instance
+        with AudioPlayer._registry_lock:
+            AudioPlayer._all_players.append(self)
+    
+    @classmethod
+    def stop_all(cls) -> None:
+        """Stop all audio players application-wide."""
+        with cls._registry_lock:
+            for player in cls._all_players:
+                if player.is_playing_flag:
+                    player.stop()
     
     def play(self, audio: np.ndarray, sample_rate: int, callback: Optional[Callable] = None) -> None:
         """Play audio with optional completion callback.
@@ -29,9 +45,14 @@ class AudioPlayer:
             sample_rate: Sample rate in Hz
             callback: Optional function to call when playback completes
         """
-        # Stop any currently playing audio
+        # Stop ALL audio players application-wide before starting new playback
         logger.debug(f"Starting audio playback - sample_rate: {sample_rate}Hz, duration: {len(audio)/sample_rate:.2f}s")
-        self.stop()
+        AudioPlayer.stop_all()
+        
+        self.current_audio = audio
+        self.current_sr = sample_rate
+        self.is_playing_flag = True
+        self.stop_event.clear()
         
         self.current_audio = audio
         self.current_sr = sample_rate

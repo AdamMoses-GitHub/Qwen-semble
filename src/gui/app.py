@@ -13,8 +13,7 @@ from utils.config import Config
 from utils.error_handler import logger, ensure_directory
 from utils.threading_helpers import run_in_thread
 
-from gui.tab_voice_clone import VoiceCloneTab
-from gui.tab_voice_design import VoiceDesignTab
+from gui.tab_voice_creation import VoiceCreationTab
 from gui.tab_narration import NarrationTab
 from gui.tab_settings import SettingsTab
 from gui.tab_saved_voices import SavedVoicesTab
@@ -133,15 +132,13 @@ class QwenTTSApp(ctk.CTk):
         self.tabview.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Add tabs
-        self.tabview.add("Voice Clone")
-        self.tabview.add("Voice Design")
+        self.tabview.add("Voice Creation")
         self.tabview.add("Narration")
         self.tabview.add("Saved Voices")
         self.tabview.add("Settings")
         
         # Create tab content (will be initialized after models load)
-        self.voice_clone_tab = None
-        self.voice_design_tab = None
+        self.voice_creation_tab = None
         self.narration_tab = None
         self.saved_voices_tab = None
         self.settings_tab = None
@@ -166,20 +163,9 @@ class QwenTTSApp(ctk.CTk):
                 workspace_dir=self.workspace_dir
             )
             
-            # Voice Clone tab (with refresh callbacks)
-            self.voice_clone_tab = VoiceCloneTab(
-                self.tabview.tab("Voice Clone"),
-                self.tts_engine,
-                self.voice_library,
-                self.config,
-                narration_refresh_callback=self.narration_tab.refresh_voice_list,
-                saved_voices_refresh_callback=self.saved_voices_tab.refresh,
-                workspace_dir=self.workspace_dir
-            )
-            
-            # Voice Design tab (with refresh callbacks)
-            self.voice_design_tab = VoiceDesignTab(
-                self.tabview.tab("Voice Design"),
+            # Voice Creation tab (unified clone and design with refresh callbacks)
+            self.voice_creation_tab = VoiceCreationTab(
+                self.tabview.tab("Voice Creation"),
                 self.tts_engine,
                 self.voice_library,
                 self.config,

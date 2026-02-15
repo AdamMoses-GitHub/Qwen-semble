@@ -81,10 +81,17 @@ class AudioPlayerWidget(ctk.CTkFrame):
     
     def _on_playback_complete(self) -> None:
         """Handle playback completion."""
-        self.play_button.configure(text="▶ Play")
-        if self.current_audio is not None and self.current_sr is not None:
-            duration = len(self.current_audio) / self.current_sr
-            self.status_label.configure(text=f"Ready ({duration:.1f}s)")
+        # Check if widget still exists before updating (prevents crashes when widget destroyed during playback)
+        try:
+            if not self.winfo_exists():
+                return
+            self.play_button.configure(text="▶ Play")
+            if self.current_audio is not None and self.current_sr is not None:
+                duration = len(self.current_audio) / self.current_sr
+                self.status_label.configure(text=f"Ready ({duration:.1f}s)")
+        except Exception:
+            # Widget was destroyed, ignore
+            pass
     
     def _update_ui(self) -> None:
         """Update UI state."""

@@ -210,7 +210,8 @@ class VoiceLibrary:
         voice_clone_prompt: Any,
         tags: Optional[List[str]] = None,
         language: str = "Auto",
-        template_test_audios: Optional[Dict[int, tuple]] = None
+        template_test_audios: Optional[Dict[int, tuple]] = None,
+        custom_test_audios: Optional[List[Dict]] = None
     ) -> str:
         """Save a cloned voice to library.
         
@@ -222,6 +223,7 @@ class VoiceLibrary:
             tags: Optional tags for categorization
             language: Voice language
             template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
+            custom_test_audios: List of dicts with {text, audio_path, audio, sr} for custom tests
             
         Returns:
             Voice ID
@@ -265,6 +267,20 @@ class VoiceLibrary:
                     template_test_paths.append(str(test_path))
                     logger.debug(f"Saved template test {idx+1}")
             
+            # Save custom test audios if provided
+            custom_test_data = []
+            if custom_test_audios:
+                logger.debug(f"Saving {len(custom_test_audios)} custom test audios...")
+                for idx, custom_test in enumerate(custom_test_audios):
+                    # Copy the audio file to voice folder
+                    test_path = voice_folder / f"custom_test_{idx+1}.wav"
+                    shutil.copy2(custom_test["audio_path"], test_path)
+                    custom_test_data.append({
+                        "text": custom_test["text"],
+                        "audio_path": str(test_path)
+                    })
+                    logger.debug(f"Saved custom test {idx+1}: {custom_test['text'][:50]}...")
+            
             # Create metadata
             voice_data = {
                 "id": voice_id,
@@ -278,6 +294,7 @@ class VoiceLibrary:
                 "prompt_file": str(prompt_dest),
                 "language": language,
                 "template_tests": template_test_paths,
+                "custom_tests": custom_test_data,
                 "usage_count": 0,
                 "last_used": None
             }
@@ -303,7 +320,8 @@ class VoiceLibrary:
         sample_audio_path: str,
         tags: Optional[List[str]] = None,
         language: str = "Auto",
-        template_test_audios: Optional[Dict[int, tuple]] = None
+        template_test_audios: Optional[Dict[int, tuple]] = None,
+        custom_test_audios: Optional[List[Dict]] = None
     ) -> str:
         """Save a designed voice to library.
         
@@ -314,6 +332,7 @@ class VoiceLibrary:
             tags: Optional tags for categorization
             language: Voice language
             template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
+            custom_test_audios: List of dicts with {text, audio_path, audio, sr} for custom tests
             
         Returns:
             Voice ID
@@ -351,6 +370,20 @@ class VoiceLibrary:
                     template_test_paths.append(str(test_path))
                     logger.debug(f"Saved template test {idx+1}")
             
+            # Save custom test audios if provided
+            custom_test_data = []
+            if custom_test_audios:
+                logger.debug(f"Saving {len(custom_test_audios)} custom test audios...")
+                for idx, custom_test in enumerate(custom_test_audios):
+                    # Copy the audio file to voice folder
+                    test_path = voice_folder / f"custom_test_{idx+1}.wav"
+                    shutil.copy2(custom_test["audio_path"], test_path)
+                    custom_test_data.append({
+                        "text": custom_test["text"],
+                        "audio_path": str(test_path)
+                    })
+                    logger.debug(f"Saved custom test {idx+1}: {custom_test['text'][:50]}...")
+            
             # Create metadata
             voice_data = {
                 "id": voice_id,
@@ -363,6 +396,7 @@ class VoiceLibrary:
                 "sample_audio": str(audio_dest),
                 "language": language,
                 "template_tests": template_test_paths,
+                "custom_tests": custom_test_data,
                 "usage_count": 0,
                 "last_used": None
             }

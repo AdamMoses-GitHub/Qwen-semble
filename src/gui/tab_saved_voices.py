@@ -450,6 +450,46 @@ class SavedVoicesTab(ctk.CTkFrame):
                 else:
                     logger.warning(f"Template test audio file not found: {test_path}")
         
+        # Custom Test Audio Files
+        custom_tests = voice.get("custom_tests", [])
+        if custom_tests:
+            custom_frame = ctk.CTkFrame(self.details_content_frame)
+            custom_frame.pack(fill="x", pady=10)
+            
+            custom_title = ctk.CTkLabel(custom_frame, text="Custom Test Audio:", font=("Arial", 12, "bold"))
+            custom_title.pack(anchor="w", pady=5)
+            
+            # Create buttons for each custom test
+            for idx, custom_test in enumerate(custom_tests):
+                test_path = custom_test.get("audio_path", "")
+                test_text = custom_test.get("text", "")
+                
+                if Path(test_path).exists():
+                    # Create a frame for each test
+                    test_item_frame = ctk.CTkFrame(custom_frame)
+                    test_item_frame.pack(fill="x", padx=10, pady=2)
+                    
+                    # Custom text preview
+                    preview_text = test_text[:60] + "..." if len(test_text) > 60 else test_text
+                    
+                    test_label = ctk.CTkLabel(
+                        test_item_frame,
+                        text=f"Custom {idx+1}: {preview_text}",
+                        anchor="w"
+                    )
+                    test_label.pack(side="left", padx=5, fill="x", expand=True)
+                    
+                    # Play button
+                    play_btn = ctk.CTkButton(
+                        test_item_frame,
+                        text="▶ Play",
+                        command=lambda path=test_path: self._play_template_test(path),
+                        width=80
+                    )
+                    play_btn.pack(side="right", padx=5)
+                else:
+                    logger.warning(f"Custom test audio file not found: {test_path}")
+        
         # Actions section
         actions_frame = ctk.CTkFrame(self.details_content_frame)
         actions_frame.pack(fill="x", pady=20)

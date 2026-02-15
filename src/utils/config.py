@@ -47,6 +47,33 @@ class Config:
                     "I am a voice model. I was created using the magic of computing.",
                     "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
                     "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+                ],
+                "example_voice_descriptions": [
+                    "Young Asian female voice, calm and professional, software engineer tone with clear articulation",
+                    "Elderly African American male voice, wise and warm, deep storyteller quality with gravitas",
+                    "Middle-aged British female voice, authoritative broadcaster tone, crisp BBC news presenter style",
+                    "Young Hispanic male voice, enthusiastic and energetic, sports commentator with rising inflections",
+                    "Mature Indian female voice, soothing and gentle, yoga instructor with meditative pacing",
+                    "Teen Caucasian female voice, bubbly and excited, social media influencer with vocal fry",
+                    "Middle-aged Middle Eastern male voice, deep and commanding, CEO presence with confidence",
+                    "Young African female voice, bright and cheerful, customer service representative warmth",
+                    "Elderly European female voice, nostalgic and tender, grandmother reading bedtime stories",
+                    "Young Australian male voice, laid-back and friendly, surfer casual with relaxed drawl",
+                    "Middle-aged Japanese female voice, precise and respectful, business professional with formality",
+                    "Teen Latino male voice, nervous and shy, introverted student with hesitant speech patterns",
+                    "Mature Russian male voice, stern and serious, military commander with authoritative bass",
+                    "Young Irish female voice, playful and witty, comedian with excellent comedic timing",
+                    "Middle-aged African male voice, passionate and motivating, life coach with inspirational energy",
+                    "Elderly Jewish male voice, scholarly and contemplative, professor lecturing with wisdom",
+                    "Young Korean female voice, cute and high-pitched, K-pop idol with aegyo vocal style",
+                    "Middle-aged Italian male voice, expressive and dramatic, opera singer with rich resonance",
+                    "Young French female voice, sophisticated and elegant, fashion designer with breathy quality",
+                    "Teen American male voice, confident and boastful, teenage athlete with cocky swagger",
+                    "Mature Chinese female voice, patient and nurturing, elementary teacher with maternal warmth",
+                    "Young German male voice, precise and technical, engineer explaining complex concepts clearly",
+                    "Middle-aged Canadian female voice, apologetic and kind, therapist with empathetic softness",
+                    "Elderly Scottish male voice, gruff and humorous, retired sailor storytelling with raspy charm",
+                    "Young Brazilian female voice, rhythmic and lively, samba dancer with vibrant melodic energy"
                 ]
             }
         else:
@@ -72,6 +99,33 @@ class Config:
                     "I am a voice model. I was created using the magic of computing.",
                     "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
                     "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+                ],
+                "example_voice_descriptions": [
+                    "Young Asian female voice, calm and professional, software engineer tone with clear articulation",
+                    "Elderly African American male voice, wise and warm, deep storyteller quality with gravitas",
+                    "Middle-aged British female voice, authoritative broadcaster tone, crisp BBC news presenter style",
+                    "Young Hispanic male voice, enthusiastic and energetic, sports commentator with rising inflections",
+                    "Mature Indian female voice, soothing and gentle, yoga instructor with meditative pacing",
+                    "Teen Caucasian female voice, bubbly and excited, social media influencer with vocal fry",
+                    "Middle-aged Middle Eastern male voice, deep and commanding, CEO presence with confidence",
+                    "Young African female voice, bright and cheerful, customer service representative warmth",
+                    "Elderly European female voice, nostalgic and tender, grandmother reading bedtime stories",
+                    "Young Australian male voice, laid-back and friendly, surfer casual with relaxed drawl",
+                    "Middle-aged Japanese female voice, precise and respectful, business professional with formality",
+                    "Teen Latino male voice, nervous and shy, introverted student with hesitant speech patterns",
+                    "Mature Russian male voice, stern and serious, military commander with authoritative bass",
+                    "Young Irish female voice, playful and witty, comedian with excellent comedic timing",
+                    "Middle-aged African male voice, passionate and motivating, life coach with inspirational energy",
+                    "Elderly Jewish male voice, scholarly and contemplative, professor lecturing with wisdom",
+                    "Young Korean female voice, cute and high-pitched, K-pop idol with aegyo vocal style",
+                    "Middle-aged Italian male voice, expressive and dramatic, opera singer with rich resonance",
+                    "Young French female voice, sophisticated and elegant, fashion designer with breathy quality",
+                    "Teen American male voice, confident and boastful, teenage athlete with cocky swagger",
+                    "Mature Chinese female voice, patient and nurturing, elementary teacher with maternal warmth",
+                    "Young German male voice, precise and technical, engineer explaining complex concepts clearly",
+                    "Middle-aged Canadian female voice, apologetic and kind, therapist with empathetic softness",
+                    "Elderly Scottish male voice, gruff and humorous, retired sailor storytelling with raspy charm",
+                    "Young Brazilian female voice, rhythmic and lively, samba dancer with vibrant melodic energy"
                 ]
             }
         
@@ -94,14 +148,21 @@ class Config:
     
     def _merge_defaults(self) -> None:
         """Merge default values for any missing configuration keys."""
+        updated = False
         for key, value in self.defaults.items():
             if key not in self.config:
                 self.config[key] = value
+                updated = True
             elif isinstance(value, dict) and isinstance(self.config[key], dict):
                 # Merge nested dictionaries
                 for subkey, subvalue in value.items():
                     if subkey not in self.config[key]:
                         self.config[key][subkey] = subvalue
+                        updated = True
+        
+        # Save config if new defaults were added
+        if updated:
+            self.save()
     
     def save(self) -> None:
         """Save configuration to file."""
