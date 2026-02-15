@@ -13,15 +13,25 @@ from utils.error_handler import logger
 class VoiceLibrary:
     """Manage saved cloned and designed voices."""
     
-    def __init__(self, library_path: str = "config/voice_library.json"):
+    def __init__(self, library_path: str = "config/voice_library.json", workspace_dir: Optional[Path] = None):
         """Initialize voice library.
         
         Args:
-            library_path: Path to voice library JSON file
+            library_path: Path to voice library JSON file (relative to workspace if workspace_dir provided)
+            workspace_dir: Root workspace directory (if None, uses old structure)
         """
-        self.library_path = Path(library_path)
-        self.cloned_voices_dir = Path("output/cloned_voices")
-        self.designed_voices_dir = Path("output/designed_voices")
+        self.workspace_dir = workspace_dir
+        
+        # Resolve paths based on workspace mode
+        if workspace_dir:
+            self.library_path = workspace_dir / "voice_library.json"
+            self.cloned_voices_dir = workspace_dir / "cloned_voices"
+            self.designed_voices_dir = workspace_dir / "designed_voices"
+        else:
+            self.library_path = Path(library_path)
+            self.cloned_voices_dir = Path("output/cloned_voices")
+            self.designed_voices_dir = Path("output/designed_voices")
+        
         self.library: Dict[str, List[Dict]] = {
             "cloned_voices": [],
             "designed_voices": []
@@ -75,6 +85,123 @@ class VoiceLibrary:
                 return voice_id
             counter += 1
     
+    def _create_readme(self, voice_data: Dict, voice_folder: Path) -> None:
+        """Create a README.txt file with voice metadata.
+        
+        Args:
+            voice_data: Dictionary containing voice metadata
+            voice_folder: Path to voice folder
+        """
+        try:
+            readme_path = voice_folder / "README.txt"
+            
+            # Format creation date
+            created_date = datetime.fromisoformat(voice_data["created"])
+            formatted_date = created_date.strftime("%B %d, %Y at %I:%M %p")
+            
+            # Build readme content
+            content = []
+            content.append("=" * 70)
+            content.append(f"VOICE MODEL: {voice_data['name']}")
+            content.append("=" * 70)
+            content.append("")
+            
+            # Basic details
+            content.append("BASIC DETAILS")
+            content.append("-" * 70)
+            content.append(f"Voice ID:       {voice_data['id']}")
+            content.append(f"Type:           {voice_data['type'].capitalize()}")
+            content.append(f"Created:        {formatted_date}")
+            content.append(f"Language:       {voice_data.get('language', 'Auto')}")
+            
+            # Tags
+            if voice_data.get('tags'):
+                tags_str = ", ".join(voice_data['tags'])
+                content.append(f"Tags:           {tags_str}")
+            else:
+                content.append("Tags:           None")
+            content.append("")
+            
+            # Type-specific details
+            if voice_data['type'] == 'cloned':
+                content.append("CLONED VOICE DETAILS")
+                content.append("-" * 70)
+                content.append(f"Reference Audio: {Path(voice_data['ref_audio']).name}")
+                content.append("")
+                content.append("Reference Text:")
+                # Wrap reference text at 68 characters
+                ref_text = voice_data.get('ref_text', 'N/A')
+                words = ref_text.split()
+                line = ""
+                for word in words:
+                    if len(line) + len(word) + 1 <= 68:
+                        line += (" " if line else "") + word
+                    else:
+                        content.append(f"  {line}")
+                        line = word
+                if line:
+                    content.append(f"  {line}")
+                content.append("")
+                content.append(f"Voice Prompt:    {Path(voice_data['prompt_file']).name}")
+                
+            elif voice_data['type'] == 'designed':
+                content.append("DESIGNED VOICE DETAILS")
+                content.append("-" * 70)
+                content.append(f"Sample Audio:    {Path(voice_data['sample_audio']).name}")
+                content.append("")
+                content.append("Voice Description:")
+                # Wrap description text at 68 characters
+                description = voice_data.get('description', 'N/A')
+                words = description.split()
+                line = ""
+                for word in words:
+                    if len(line) + len(word) + 1 <= 68:
+                        line += (" " if line else "") + word
+                    else:
+                        content.append(f"  {line}")
+                        line = word
+                if line:
+                    content.append(f"  {line}")
+            
+            content.append("")
+            
+            # Template tests
+            if voice_data.get('template_tests'):
+                content.append("TEMPLATE TEST AUDIO FILES")
+                content.append("-" * 70)
+                for idx, test_path in enumerate(voice_data['template_tests'], 1):
+                    content.append(f"  {idx}. {Path(test_path).name}")
+                content.append("")
+            
+            # Usage statistics
+            content.append("USAGE STATISTICS")
+            content.append("-" * 70)
+            content.append(f"Times Used:     {voice_data.get('usage_count', 0)}")
+            last_used = voice_data.get('last_used')
+            if last_used:
+                last_used_date = datetime.fromisoformat(last_used)
+                formatted_last_used = last_used_date.strftime("%B %d, %Y at %I:%M %p")
+                content.append(f"Last Used:      {formatted_last_used}")
+            else:
+                content.append("Last Used:      Never")
+            content.append("")
+            
+            # Footer
+            content.append("=" * 70)
+            content.append("This voice model was created with Qwen-semble.")
+            content.append("For more information, see the voice_library.json file.")
+            content.append("=" * 70)
+            
+            # Write to file
+            with open(readme_path, 'w', encoding='utf-8') as f:
+                f.write("\n".join(content))
+            
+            logger.debug(f"Created README.txt in {voice_folder.name}")
+            
+        except Exception as e:
+            logger.error(f"Failed to create README.txt: {e}")
+            # Don't raise - readme is supplementary, not critical
+    
     def save_cloned_voice(
         self,
         name: str,
@@ -82,7 +209,8 @@ class VoiceLibrary:
         ref_text: str,
         voice_clone_prompt: Any,
         tags: Optional[List[str]] = None,
-        language: str = "Auto"
+        language: str = "Auto",
+        template_test_audios: Optional[Dict[int, tuple]] = None
     ) -> str:
         """Save a cloned voice to library.
         
@@ -93,25 +221,49 @@ class VoiceLibrary:
             voice_clone_prompt: Voice clone prompt object
             tags: Optional tags for categorization
             language: Voice language
+            template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
             
         Returns:
             Voice ID
         """
         try:
+            from core.audio_utils import save_audio
+            
             logger.info(f"Saving cloned voice: {name}")
             voice_id = self._generate_voice_id("cloned")
             logger.debug(f"Generated voice ID: {voice_id}")
             
-            # Copy audio file to library
-            audio_dest = self.cloned_voices_dir / f"{voice_id}.wav"
+            # Create timestamped subfolder: VoiceName_YYYYMMDD_HHMMSS
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Sanitize name for folder
+            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
+            safe_name = safe_name.replace(' ', '_')
+            folder_name = f"{safe_name}_{timestamp}"
+            voice_folder = self.cloned_voices_dir / folder_name
+            voice_folder.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Created voice folder: {voice_folder}")
+            
+            # Copy audio file to subfolder
+            audio_dest = voice_folder / "reference.wav"
             logger.debug(f"Copying reference audio to: {audio_dest}")
             shutil.copy2(ref_audio_path, audio_dest)
             
             # Save voice clone prompt
-            prompt_dest = self.cloned_voices_dir / f"{voice_id}_prompt.pkl"
+            prompt_dest = voice_folder / "voice_prompt.pkl"
             logger.debug(f"Saving voice clone prompt to: {prompt_dest}")
             with open(prompt_dest, 'wb') as f:
                 pickle.dump(voice_clone_prompt, f)
+            
+            # Save template test audios if provided
+            template_test_paths = []
+            if template_test_audios:
+                logger.debug(f"Saving {len(template_test_audios)} template test audios...")
+                for idx in sorted(template_test_audios.keys()):
+                    audio, sr = template_test_audios[idx]
+                    test_path = voice_folder / f"template_test_{idx+1}.wav"
+                    save_audio(audio, sr, str(test_path))
+                    template_test_paths.append(str(test_path))
+                    logger.debug(f"Saved template test {idx+1}")
             
             # Create metadata
             voice_data = {
@@ -120,17 +272,24 @@ class VoiceLibrary:
                 "tags": tags or [],
                 "type": "cloned",
                 "created": datetime.now().isoformat(),
+                "folder": str(voice_folder),
                 "ref_audio": str(audio_dest),
                 "ref_text": ref_text,
                 "prompt_file": str(prompt_dest),
-                "language": language
+                "language": language,
+                "template_tests": template_test_paths,
+                "usage_count": 0,
+                "last_used": None
             }
             
             logger.debug("Adding voice to library and saving...")
             self.library["cloned_voices"].append(voice_data)
             self.save()
             
-            logger.info(f"Cloned voice saved: {name} ({voice_id})")
+            # Create README.txt with voice details
+            self._create_readme(voice_data, voice_folder)
+            
+            logger.info(f"Cloned voice saved: {name} ({voice_id}) in folder: {folder_name}")
             return voice_id
             
         except Exception as e:
@@ -143,7 +302,8 @@ class VoiceLibrary:
         description: str,
         sample_audio_path: str,
         tags: Optional[List[str]] = None,
-        language: str = "Auto"
+        language: str = "Auto",
+        template_test_audios: Optional[Dict[int, tuple]] = None
     ) -> str:
         """Save a designed voice to library.
         
@@ -153,16 +313,43 @@ class VoiceLibrary:
             sample_audio_path: Path to sample audio file
             tags: Optional tags for categorization
             language: Voice language
+            template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
             
         Returns:
             Voice ID
         """
         try:
-            voice_id = self._generate_voice_id("designed")
+            from core.audio_utils import save_audio
             
-            # Copy audio file to library
-            audio_dest = self.designed_voices_dir / f"{voice_id}.wav"
+            logger.info(f"Saving designed voice: {name}")
+            voice_id = self._generate_voice_id("designed")
+            logger.debug(f"Generated voice ID: {voice_id}")
+            
+            # Create timestamped subfolder: VoiceName_YYYYMMDD_HHMMSS
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # Sanitize name for folder
+            safe_name = "".join(c if c.isalnum() or c in (' ', '-', '_') else '_' for c in name)
+            safe_name = safe_name.replace(' ', '_')
+            folder_name = f"{safe_name}_{timestamp}"
+            voice_folder = self.designed_voices_dir / folder_name
+            voice_folder.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Created voice folder: {voice_folder}")
+            
+            # Copy sample audio file to subfolder
+            audio_dest = voice_folder / "sample.wav"
+            logger.debug(f"Copying sample audio to: {audio_dest}")
             shutil.copy2(sample_audio_path, audio_dest)
+            
+            # Save template test audios if provided
+            template_test_paths = []
+            if template_test_audios:
+                logger.debug(f"Saving {len(template_test_audios)} template test audios...")
+                for idx in sorted(template_test_audios.keys()):
+                    audio, sr = template_test_audios[idx]
+                    test_path = voice_folder / f"template_test_{idx+1}.wav"
+                    save_audio(audio, sr, str(test_path))
+                    template_test_paths.append(str(test_path))
+                    logger.debug(f"Saved template test {idx+1}")
             
             # Create metadata
             voice_data = {
@@ -171,15 +358,22 @@ class VoiceLibrary:
                 "tags": tags or [],
                 "type": "designed",
                 "created": datetime.now().isoformat(),
+                "folder": str(voice_folder),
                 "description": description,
                 "sample_audio": str(audio_dest),
-                "language": language
+                "language": language,
+                "template_tests": template_test_paths,
+                "usage_count": 0,
+                "last_used": None
             }
             
             self.library["designed_voices"].append(voice_data)
             self.save()
             
-            logger.info(f"Designed voice saved: {name} ({voice_id})")
+            # Create README.txt with voice details
+            self._create_readme(voice_data, voice_folder)
+            
+            logger.info(f"Designed voice saved: {name} ({voice_id}) in folder: {folder_name}")
             return voice_id
             
         except Exception as e:
@@ -349,6 +543,52 @@ class VoiceLibrary:
             Number of voices
         """
         return len(self.get_all_voices(voice_type))
+    
+    def increment_usage(self, voice_id: str) -> bool:
+        """Increment usage count for a voice.
+        
+        Args:
+            voice_id: Voice ID
+            
+        Returns:
+            True if successful, False if voice not found
+        """
+        try:
+            # Find the voice in either list
+            voice = None
+            voice_list = None
+            
+            for v in self.library["cloned_voices"]:
+                if v["id"] == voice_id:
+                    voice = v
+                    voice_list = "cloned_voices"
+                    break
+            
+            if not voice:
+                for v in self.library["designed_voices"]:
+                    if v["id"] == voice_id:
+                        voice = v
+                        voice_list = "designed_voices"
+                        break
+            
+            if not voice:
+                logger.warning(f"Voice not found for usage tracking: {voice_id}")
+                return False
+            
+            # Update usage stats (with backward compatibility)
+            if "usage_count" not in voice:
+                voice["usage_count"] = 0
+            voice["usage_count"] += 1
+            voice["last_used"] = datetime.now().isoformat()
+            
+            # Save changes
+            self.save()
+            logger.debug(f"Updated usage for voice {voice_id}: {voice['usage_count']} uses")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to increment usage for {voice_id}: {e}")
+            return False
     
     def export_voice(self, voice_id: str, export_path: str) -> None:
         """Export voice data to a file for sharing.

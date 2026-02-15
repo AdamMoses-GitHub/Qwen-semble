@@ -2,13 +2,13 @@
 
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
+from pathlib import Path
 from datetime import datetime
 
 from core.audio_utils import save_audio
 from utils.error_handler import logger, show_error_dialog
 from utils.threading_helpers import TTSWorker
-from gui.components import AudioPlayerWidget, VoiceLibraryItem
-from gui.tab_voice_clone import VoiceSaveDialog
+from gui.components import AudioPlayerWidget
 
 
 class VoiceDesignTab(ctk.CTkFrame):
@@ -17,22 +17,28 @@ class VoiceDesignTab(ctk.CTkFrame):
     EXAMPLE_PROMPTS = [
         "Young female voice, cheerful and energetic, slightly high pitch",
         "Middle-aged male voice, authoritative news anchor tone, deep and confident",
-        "Elderly female voice, warm grandmother tone,  gentle and comforting",
+        "Elderly female voice, warm grandmother tone, gentle and comforting",
         "Teen male voice, slightly shy and nervous, tenor range with occasional voice breaks",
         "Professional businesswoman voice, clear articulation, confident mid-range",
     ]
     
-    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None):
+    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_dir=None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.voice_library = voice_library
         self.config = config
         self.narration_refresh_callback = narration_refresh_callback
+        self.saved_voices_refresh_callback = saved_voices_refresh_callback
+        self.workspace_dir = workspace_dir
         
-        self.generated_audio = None
-        self.generated_sr = None
         self.current_description = ""
+        self.sample_audio = None
+        self.sample_sr = None
+        self.template_test_audios = {}  # {index: (audio, sr)}
+        self.test_audio = None
+        self.test_sr = None
+        self.current_worker = None
         
         self._create_ui()
         
@@ -41,347 +47,480 @@ class VoiceDesignTab(ctk.CTkFrame):
     
     def _create_ui(self) -> None:
         """Create tab UI."""
-        self.columnconfigure(0, weight=2)
+        # Two column layout
+        self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.rowconfigure(0, weight=1)
         
-        # Left panel: Design
-        self._create_design_panel()
+        # Left panel: Create Voice Model
+        self._create_model_panel()
         
-        # Right panel: Library
-        self._create_library_panel()
+        # Right panel: Test & Save (split top/bottom)
+        self._create_test_save_panel()
     
-    def _create_design_panel(self) -> None:
-        """Create voice design panel."""
+    def _create_model_panel(self) -> None:
+        """Create voice model creation panel (left)."""
         panel = ctk.CTkFrame(self)
-        panel.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        panel.grid(row=0, column=0, sticky="nsew", padx=(10, 5), pady=10)
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(2, weight=1)
         
-        title = ctk.CTkLabel(panel, text="Voice Design", font=("Arial", 16, "bold"))
-        title.pack(pady=10)
+        # Title
+        title = ctk.CTkLabel(panel, text="🎨 Create Voice Model", font=("Arial", 18, "bold"))
+        title.grid(row=0, column=0, pady=(10, 20), sticky="w", padx=10)
         
-        # Description
-        desc_label = ctk.CTkLabel(panel, text="Describe the voice you want to create:")
-        desc_label.pack(pady=(10, 5))
+        # Description section
+        desc_label = ctk.CTkLabel(panel, text="Voice Description:", font=("Arial", 12, "bold"))
+        desc_label.grid(row=1, column=0, sticky="w", padx=10, pady=5)
         
-        self.description_text = ctk.CTkTextbox(panel, height=120)
-        self.description_text.pack(fill="x", padx=10, pady=5)
+        self.description_text = ctk.CTkTextbox(panel, height=150)
+        self.description_text.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
         
-        # Example prompts button
-        example_btn = ctk.CTkButton(
+        # Load from file button
+        load_desc_btn = ctk.CTkButton(
             panel,
-            text="Load Example Prompt",
-            command=self._show_examples
+            text="📁 Load from Text File",
+            command=self._load_description_from_file,
+            width=150
         )
-        example_btn.pack(pady=5)
+        load_desc_btn.grid(row=3, column=0, pady=5)
         
-        # Test text
-        test_label = ctk.CTkLabel(panel, text="Test Text:")
-        test_label.pack(pady=(20, 5))
+        # Example prompts
+        example_label = ctk.CTkLabel(panel, text="Example Descriptions:", font=("Arial", 11, "bold"))
+        example_label.grid(row=4, column=0, sticky="w", padx=10, pady=(15, 5))
         
-        self.test_text = ctk.CTkTextbox(panel, height=100)
-        self.test_text.pack(fill="both", expand=True, padx=10, pady=5)
-        self.test_text.insert("1.0", "Hello, this is a test of the designed voice.")
-        
-        # Language
-        lang_frame = ctk.CTkFrame(panel)
-        lang_frame.pack(fill="x", padx=10, pady=10)
-        
-        lang_label = ctk.CTkLabel(lang_frame, text="Language:")
-        lang_label.pack(side="left", padx=5)
-        
-        languages = ["Auto"] + self.tts_engine.LANGUAGES[1:]
-        self.language_combo = ctk.CTkComboBox(lang_frame, values=languages, width=150)
-        self.language_combo.set("Auto")
-        self.language_combo.pack(side="left", padx=5)
-        
-        # Generate button
-        self.generate_button = ctk.CTkButton(
-            panel,
-            text="Generate Voice",
-            command=self._generate_voice,
-            height=40,
-            font=("Arial", 14, "bold"),
-            fg_color="green"
-        )
-        self.generate_button.pack(pady=20)
-        
-        # Progress
-        self.progress_bar = ctk.CTkProgressBar(panel)
-        self.progress_bar.pack(fill="x", padx=10, pady=5)
-        self.progress_bar.set(0)
-        self.progress_label = ctk.CTkLabel(panel, text="")
-        self.progress_label.pack()
-        
-        # Audio player
-        self.audio_player = AudioPlayerWidget(panel)
-        self.audio_player.pack(fill="x", padx=10, pady=10)
-        
-        # Save buttons
-        btn_frame = ctk.CTkFrame(panel)
-        btn_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.save_audio_button = ctk.CTkButton(
-            btn_frame,
-            text="Save Audio",
-            command=self._save_audio,
-            state="disabled"
-        )
-        self.save_audio_button.pack(side="left", padx=5, expand=True, fill="x")
-        
-        self.save_design_button = ctk.CTkButton(
-            btn_frame,
-            text="Save to Library",
-            command=self._save_to_library,
-            state="disabled"
-        )
-        self.save_design_button.pack(side="left", padx=5, expand=True, fill="x")
-    
-    def _create_library_panel(self) -> None:
-        """Create voice library panel."""
-        panel = ctk.CTkFrame(self)
-        panel.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
-        
-        title = ctk.CTkLabel(panel, text="Designed Voices", font=("Arial", 16, "bold"))
-        title.pack(pady=10)
-        
-        # Voice list
-        self.voice_list_frame = ctk.CTkScrollableFrame(panel)
-        self.voice_list_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        # Refresh button
-        refresh_btn = ctk.CTkButton(panel, text="Refresh Library", command=self._refresh_library)
-        refresh_btn.pack(pady=5)
-        
-        self._refresh_library()
-    
-    def _show_examples(self) -> None:
-        """Show example prompts dialog."""
-        dialog = ctk.CTkToplevel(self)
-        dialog.title("Example Prompts")
-        dialog.geometry("600x400")
-        dialog.transient(self)
-        dialog.grab_set()
-        
-        label = ctk.CTkLabel(dialog, text="Select an example prompt:", font=("Arial", 14, "bold"))
-        label.pack(pady=10)
+        example_frame = ctk.CTkScrollableFrame(panel, height=120)
+        example_frame.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
         
         for prompt in self.EXAMPLE_PROMPTS:
             btn = ctk.CTkButton(
-                dialog,
+                example_frame,
                 text=prompt,
-                command=lambda p=prompt: self._use_example(p, dialog),
-                anchor="w"
+                command=lambda p=prompt: self._use_example(p),
+                anchor="w",
+                height=25,
+                font=("Arial", 10)
             )
-            btn.pack(fill="x", padx=20, pady=5)
+            btn.pack(fill="x", pady=2)
+        
+        # Language selection
+        lang_frame = ctk.CTkFrame(panel)
+        lang_frame.grid(row=6, column=0, sticky="ew", padx=10, pady=10)
+        
+        lang_label = ctk.CTkLabel(lang_frame, text="Language:", font=("Arial", 11, "bold"))
+        lang_label.pack(side="left", padx=5)
+        
+        languages = ["Auto"] + self.tts_engine.LANGUAGES[1:]
+        last_lang = self.config.get("last_used_language", "Auto")
+        self.language_combo = ctk.CTkComboBox(lang_frame, values=languages, width=120)
+        self.language_combo.set(last_lang)
+        self.language_combo.pack(side="left", padx=5)
+        
+        # Info text
+        info_text = ctk.CTkLabel(
+            panel,
+            text="💡 Tip: Be specific about gender, age, tone, pitch, and speaking style\nfor best voice design results.",
+            font=("Arial", 10),
+            text_color="gray",
+            justify="left"
+        )
+        info_text.grid(row=7, column=0, sticky="n", padx=10, pady=10)
+        
+        # Create Model button
+        self.create_model_button = ctk.CTkButton(
+            panel,
+            text="🎨 Create Voice Model",
+            command=self._create_voice_model,
+            height=50,
+            font=("Arial", 16, "bold"),
+            fg_color="green",
+            hover_color="darkgreen"
+        )
+        self.create_model_button.grid(row=8, column=0, sticky="ew", padx=10, pady=20)
+        
+        # Progress bar
+        self.model_progress_bar = ctk.CTkProgressBar(panel)
+        self.model_progress_bar.grid(row=9, column=0, sticky="ew", padx=10, pady=5)
+        self.model_progress_bar.set(0)
+        
+        self.model_progress_label = ctk.CTkLabel(panel, text="", font=("Arial", 10))
+        self.model_progress_label.grid(row=10, column=0, pady=(0, 10))
     
-    def _use_example(self, prompt: str, dialog) -> None:
+    def _create_test_save_panel(self) -> None:
+        """Create test and save panel (right, split top/bottom)."""
+        panel = ctk.CTkFrame(self)
+        panel.grid(row=0, column=1, sticky="nsew", padx=(5, 10), pady=10)
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(0, weight=1)
+        panel.rowconfigure(1, weight=1)
+        
+        # Top: Test Voice Model
+        self._create_test_panel(panel)
+        
+        # Bottom: Save Voice Model
+        self._create_save_panel(panel)
+    
+    def _create_test_panel(self, parent) -> None:
+        """Create test voice model section (top of right panel)."""
+        panel = ctk.CTkFrame(parent)
+        panel.grid(row=0, column=0, sticky="nsew", padx=5, pady=(5, 2))
+        panel.columnconfigure(0, weight=1)
+        panel.rowconfigure(2, weight=1)
+        
+        # Title
+        title = ctk.CTkLabel(panel, text="🎧 Test Voice Model", font=("Arial", 16, "bold"))
+        title.grid(row=0, column=0, pady=(10, 10), sticky="w", padx=10)
+        
+        # Test text area
+        test_label = ctk.CTkLabel(panel, text="Test Text:", font=("Arial", 11, "bold"))
+        test_label.grid(row=1, column=0, sticky="w", padx=10, pady=(5, 2))
+        
+        self.test_text = ctk.CTkTextbox(panel, height=100)
+        self.test_text.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
+        self.test_text.insert("1.0", "Hello! This is a test of my designed voice.")
+        
+        # Load test text button
+        load_test_btn = ctk.CTkButton(
+            panel,
+            text="📁 Load from File",
+            command=self._load_test_text_from_file,
+            width=120
+        )
+        load_test_btn.grid(row=3, column=0, pady=5)
+        
+        # Generate test button
+        self.generate_test_button = ctk.CTkButton(
+            panel,
+            text="🎙️ Generate Test Speech",
+            command=self._generate_test_speech,
+            height=40,
+            font=("Arial", 13, "bold"),
+            state="disabled"
+        )
+        self.generate_test_button.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
+        
+        # Audio player
+        self.test_audio_player = AudioPlayerWidget(panel)
+        self.test_audio_player.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Template test buttons
+        template_label = ctk.CTkLabel(panel, text="Template Tests:", font=("Arial", 11, "bold"))
+        template_label.grid(row=6, column=0, sticky="w", padx=10, pady=(10, 5))
+        
+        template_frame = ctk.CTkFrame(panel)
+        template_frame.grid(row=7, column=0, sticky="ew", padx=10, pady=(0, 10))
+        template_frame.columnconfigure(0, weight=1)
+        
+        self.template_buttons = []
+        for i in range(3):
+            btn = ctk.CTkButton(
+                template_frame,
+                text=f"▶ Template Test {i+1}",
+                command=lambda idx=i: self._play_template_test(idx),
+                state="disabled",
+                height=30
+            )
+            btn.grid(row=i, column=0, sticky="ew", padx=5, pady=2)
+            self.template_buttons.append(btn)
+    
+    def _create_save_panel(self, parent) -> None:
+        """Create save voice model section (bottom of right panel)."""
+        panel = ctk.CTkFrame(parent)
+        panel.grid(row=1, column=0, sticky="nsew", padx=5, pady=(2, 5))
+        panel.columnconfigure(0, weight=1)
+        
+        # Title
+        title = ctk.CTkLabel(panel, text="💾 Save Voice Model", font=("Arial", 16, "bold"))
+        title.grid(row=0, column=0, pady=(10, 10), sticky="w", padx=10)
+        
+        # Voice name
+        name_label = ctk.CTkLabel(panel, text="Voice Name:", font=("Arial", 11, "bold"))
+        name_label.grid(row=1, column=0, sticky="w", padx=10, pady=(5, 2))
+        
+        self.voice_name_entry = ctk.CTkEntry(panel, placeholder_text="Enter voice name...")
+        self.voice_name_entry.grid(row=2, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Tags
+        tags_label = ctk.CTkLabel(panel, text="Tags (comma-separated):", font=("Arial", 11, "bold"))
+        tags_label.grid(row=3, column=0, sticky="w", padx=10, pady=(10, 2))
+        
+        self.tags_entry = ctk.CTkEntry(panel, placeholder_text="e.g., female, professional, clear")
+        self.tags_entry.grid(row=4, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Save button
+        self.save_voice_button = ctk.CTkButton(
+            panel,
+            text="💾 Save Voice Model",
+            command=self._save_voice_model,
+            height=45,
+            font=("Arial", 14, "bold"),
+            fg_color="blue",
+            hover_color="darkblue",
+            state="disabled"
+        )
+        self.save_voice_button.grid(row=5, column=0, sticky="ew", padx=10, pady=(15, 10))
+    
+    def _use_example(self, prompt: str) -> None:
         """Use example prompt."""
-        logger.debug(f"Using example prompt: {prompt[:50]}...")
         self.description_text.delete("1.0", "end")
         self.description_text.insert("1.0", prompt)
-        dialog.destroy()
     
-    def _generate_voice(self) -> None:
-        """Generate voice from description."""
-        logger.info("Starting voice design generation...")
+    def _load_description_from_file(self) -> None:
+        """Load description from text file."""
+        filepath = filedialog.askopenfilename(
+            title="Load Description",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                self.description_text.delete("1.0", "end")
+                self.description_text.insert("1.0", text)
+            except Exception as e:
+                show_error_dialog(e, "loading description file", self)
+    
+    def _load_test_text_from_file(self) -> None:
+        """Load test text from file."""
+        filepath = filedialog.askopenfilename(
+            title="Load Test Text",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        
+        if filepath:
+            try:
+                with open(filepath, 'r', encoding='utf-8') as f:
+                    text = f.read()
+                self.test_text.delete("1.0", "end")
+                self.test_text.insert("1.0", text)
+            except Exception as e:
+                show_error_dialog(e, "loading test text file", self)
+    
+    def _create_voice_model(self) -> None:
+        """Create voice model (designed voice) and generate template tests."""
+        logger.info("Creating designed voice model...")
+        
+        # Validate inputs
         description = self.description_text.get("1.0", "end-1c").strip()
         if not description:
-            logger.warning("Generate attempted without voice description")
             messagebox.showerror("Missing Input", "Please provide a voice description.")
             return
         
-        test_text = self.test_text.get("1.0", "end-1c").strip()
-        if not test_text:
-            logger.warning("Generate attempted without test text")
-            messagebox.showerror("Missing Input", "Please provide test text.")
-            return
+        self.current_description = description
+        language = self.language_combo.get()
+        self.config.set("last_used_language", language)
         
-        logger.info(f"Voice description: {description[:100]}...")
-        logger.info(f"Test text length: {len(test_text)} characters")
+        # Disable UI
+        self.create_model_button.configure(state="disabled", text="Creating Model...")
+        self.model_progress_bar.set(0)
+        self.model_progress_label.configure(text="Initializing...")
         
-        # Load model if needed
+        # Load voice design model if needed
         if self.tts_engine.voice_design_model is None:
-            logger.info("VoiceDesign model not loaded, loading now...")
-            self.progress_label.configure(text="Loading VoiceDesign model...")
+            logger.info("Loading VoiceDesign model...")
+            self.model_progress_label.configure(text="Loading VoiceDesign model...")
             try:
                 model_size = self.config.get("model_size", "1.7B")
-                logger.debug(f"Loading VoiceDesign model with size: {model_size}")
                 self.tts_engine.load_voice_design_model(model_size)
             except Exception as e:
                 logger.error(f"Failed to load VoiceDesign model: {e}")
                 show_error_dialog(e, "loading VoiceDesign model", self)
+                self._reset_model_ui()
                 return
-        else:
-            logger.debug("VoiceDesign model already loaded")
         
-        self.current_description = description
-        language = self.language_combo.get()
-        logger.debug(f"Language: {language}")
-        
-        self.generate_button.configure(state="disabled", text="Generating...")
-        self.progress_bar.set(0)
-        self.progress_label.configure(text="Designing voice...")
-        
-        def generate_task():
-            logger.info("Starting voice design generation task...")
+        def create_task():
+            """Background task to create voice model."""
+            logger.info("Generating sample audio with voice design...")
+            
+            # Generate a sample with the description
+            sample_text = "Hello, this is a voice sample created from the design description."
             wavs, sr = self.tts_engine.generate_voice_design(
-                text=test_text,
+                text=sample_text,
                 language=language,
                 instruct=description
             )
-            logger.info(f"Voice design generation completed - {len(wavs)} segments at {sr}Hz")
-            return wavs, sr
+            sample_audio = wavs[0]
+            
+            logger.info("Generating template test transcripts...")
+            
+            # Get template test transcripts from config
+            template_texts = self.config.get("template_test_transcripts", [
+                "I am a voice model. I was created using the magic of computing.",
+                "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
+                "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+            ])
+            
+            # Generate all template tests
+            template_audios = {}
+            for idx, text in enumerate(template_texts):
+                logger.info(f"Generating template test {idx+1}/3...")
+                wavs, sr = self.tts_engine.generate_voice_design(
+                    text=text,
+                    language=language,
+                    instruct=description
+                )
+                template_audios[idx] = (wavs[0], sr)
+            
+            return sample_audio, sr, template_audios
         
         def on_success(result):
-            """Handle successful generation."""
-            logger.info("Processing voice design success in UI thread")
-            try:
-                wavs, sr = result
-                self.generated_audio = wavs[0]
-                self.generated_sr = sr
-                
-                logger.debug(f"Loading audio into player: {len(self.generated_audio)} samples at {sr}Hz")
-                self.progress_bar.set(1.0)
-                self.progress_label.configure(text="Voice generated!")
-                self.audio_player.load_audio(self.generated_audio, sr)
-                self.save_audio_button.configure(state="normal")
-                self.save_design_button.configure(state="normal")
-                
-                self.generate_button.configure(state="normal", text="Generate Voice")
-                logger.info("Voice design generation successful!")
-                messagebox.showinfo("Success", "Voice designed successfully!")
-            except Exception as e:
-                logger.error(f"Error in success callback: {e}", exc_info=True)
-                show_error_dialog(e, "processing voice design result", self)
+            """Handle successful model creation."""
+            logger.info("Voice model created successfully")
+            self.sample_audio, self.sample_sr, self.template_test_audios = result
+            
+            # Update UI
+            self.model_progress_bar.set(1.0)
+            self.model_progress_label.configure(text="✅ Voice model created!")
+            
+            # Enable test and save sections
+            self.generate_test_button.configure(state="normal")
+            for btn in self.template_buttons:
+                btn.configure(state="normal")
+            self.save_voice_button.configure(state="normal")
+            
+            # Auto-play sample
+            self.test_audio_player.load_audio(self.sample_audio, self.sample_sr)
+            self.test_audio_player.play()
+            
+            self._reset_model_ui()
+            messagebox.showinfo("Success", "Voice model created successfully!\n\nYou can now test it or save it to your library.")
         
         def on_error(error):
-            logger.error(f"Voice design generation failed: {error}")
-            show_error_dialog(error, "generating voice design", self)
-            self.generate_button.configure(state="normal", text="Generate Voice")
-            self.progress_bar.set(0)
-            self.progress_label.configure(text="")
+            """Handle error."""
+            logger.error(f"Failed to create voice model: {error}")
+            show_error_dialog(error, "creating voice model", self)
+            self._reset_model_ui()
         
-        # Update UI to show generation started
-        self.progress_bar.set(0.1)
-        self.progress_label.configure(text="Starting generation...")
-        logger.info("Starting background worker thread...")
+        # Run in background
+        self.model_progress_bar.set(0.3)
+        self.model_progress_label.configure(text="Creating voice model...")
         
-        # Run in background with proper callback capture
-        def success_wrapper(result):
-            logger.info("Voice design task completed, scheduling UI update")
-            self.after(0, lambda: on_success(result))
+        worker = TTSWorker(
+            create_task,
+            success_callback=lambda r: self.after(0, lambda: on_success(r)),
+            error_callback=lambda e: self.after(0, lambda: on_error(e))
+        )
+        self.current_worker = worker
+        worker.start()
+    
+    def _reset_model_ui(self) -> None:
+        """Reset model creation UI."""
+        self.create_model_button.configure(state="normal", text="🎨 Create Voice Model")
+        self.model_progress_bar.set(0)
+        self.model_progress_label.configure(text="")
+        self.current_worker = None
+    
+    def _generate_test_speech(self) -> None:
+        """Generate test speech with current voice model."""
+        if not self.current_description:
+            messagebox.showerror("Error", "Please create a voice model first.")
+            return
         
-        def error_wrapper(error):
-            logger.error(f"Voice design task failed: {error}")
-            self.after(0, lambda: on_error(error))
+        test_text = self.test_text.get("1.0", "end-1c").strip()
+        if not test_text:
+            messagebox.showerror("Missing Input", "Please enter test text.")
+            return
+        
+        logger.info("Generating test speech...")
+        self.generate_test_button.configure(state="disabled", text="Generating...")
+        
+        language = self.language_combo.get()
+        
+        def generate_task():
+            """Background generation task."""
+            wavs, sr = self.tts_engine.generate_voice_design(
+                text=test_text,
+                language=language,
+                instruct=self.current_description
+            )
+            return wavs[0], sr
+        
+        def on_success(result):
+            """Handle success."""
+            self.test_audio, self.test_sr = result
+            self.test_audio_player.load_audio(self.test_audio, self.test_sr)
+            self.test_audio_player.play()
+            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
+            logger.info("Test speech generated successfully")
+        
+        def on_error(error):
+            """Handle error."""
+            show_error_dialog(error, "generating test speech", self)
+            self.generate_test_button.configure(state="normal", text="🎙️ Generate Test Speech")
         
         worker = TTSWorker(
             generate_task,
-            success_callback=success_wrapper,
-            error_callback=error_wrapper
+            success_callback=lambda r: self.after(0, lambda: on_success(r)),
+            error_callback=lambda e: self.after(0, lambda: on_error(e))
         )
         worker.start()
-        logger.debug("Worker thread started")
     
-    def _save_audio(self) -> None:
-        """Save generated audio."""
-        if self.generated_audio is None:
+    def _play_template_test(self, index: int) -> None:
+        """Play a template test audio."""
+        if index in self.template_test_audios:
+            audio, sr = self.template_test_audios[index]
+            self.test_audio_player.load_audio(audio, sr)
+            self.test_audio_player.play()
+            logger.info(f"Playing template test {index+1}")
+        else:
+            logger.warning(f"Template test {index+1} not available")
+    
+    def _save_voice_model(self) -> None:
+        """Save voice model to library."""
+        if self.sample_audio is None or not self.current_description:
+            messagebox.showerror("Error", "Please create a voice model first.")
             return
         
-        filepath = filedialog.asksaveasfilename(
-            title="Save Audio",
-            defaultextension=".wav",
-            filetypes=[("WAV files", "*.wav")]
-        )
-        
-        if filepath:
-            if self.generated_sr is None:
-                messagebox.showerror("Error", "Audio generation failed: no sample rate available")
-                return
-            try:
-                save_audio(self.generated_audio, self.generated_sr, filepath)
-                messagebox.showinfo("Success", f"Audio saved to:\n{filepath}")
-            except Exception as e:
-                show_error_dialog(e, "saving audio", self)
-    
-    def _save_to_library(self) -> None:
-        """Save designed voice to library."""
-        if self.generated_audio is None or self.generated_sr is None:
+        if self.sample_sr is None:
+            messagebox.showerror("Error", "Invalid sample audio data.")
             return
         
-        dialog = VoiceSaveDialog(self, "Save Designed Voice")
-        self.wait_window(dialog)
-        
-        if dialog.result:
-            try:
-                # Save audio temporarily
-                temp_path = f"output/temp/voice_design_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-                save_audio(self.generated_audio, self.generated_sr, temp_path)
-                
-                # Save to library
-                voice_id = self.voice_library.save_designed_voice(
-                    name=dialog.result["name"],
-                    description=self.current_description,
-                    sample_audio_path=temp_path,
-                    tags=dialog.result["tags"],
-                    language=self.language_combo.get()
-                )
-                
-                messagebox.showinfo("Success", f"Voice design saved: {dialog.result['name']}")
-                self._refresh_library()
-                
-                # Refresh narration tab voice list if callback provided
-                if self.narration_refresh_callback:
-                    logger.debug("Refreshing narration tab voice list")
-                    self.narration_refresh_callback()
-                
-            except Exception as e:
-                show_error_dialog(e, "saving voice design", self)
-    
-    def _refresh_library(self) -> None:
-        """Refresh library display."""
-        for widget in self.voice_list_frame.winfo_children():
-            widget.destroy()
-        
-        voices = self.voice_library.get_all_voices(voice_type="designed")
-        
-        if not voices:
-            label = ctk.CTkLabel(self.voice_list_frame, text="No designed voices yet", text_color="gray")
-            label.pack(pady=20)
+        # Get name and tags
+        name = self.voice_name_entry.get().strip()
+        if not name:
+            messagebox.showerror("Missing Input", "Please enter a voice name.")
             return
         
-        for voice in voices:
-            item = VoiceLibraryItem(
-                self.voice_list_frame,
-                voice,
-                on_load=self._load_design,
-                on_delete=self._delete_design,
-                on_play=self._play_sample
-            )
-            item.pack(fill="x", pady=2)
-    
-    def _load_design(self, voice_data: dict) -> None:
-        """Load voice design."""
-        self.description_text.delete("1.0", "end")
-        self.description_text.insert("1.0", voice_data.get("description", ""))
-        messagebox.showinfo("Success", f"Loaded: {voice_data['name']}")
-    
-    def _delete_design(self, voice_data: dict) -> None:
-        """Delete voice design."""
-        response = messagebox.askyesno(
-            "Confirm Delete",
-            f"Delete voice design '{voice_data['name']}'?"
-        )
-        if response:
-            self.voice_library.delete_voice(voice_data["id"])
-            self._refresh_library()
-    
-    def _play_sample(self, voice_data: dict) -> None:
-        """Play voice sample."""
+        tags_text = self.tags_entry.get().strip()
+        tags = [t.strip() for t in tags_text.split(",") if t.strip()]
+        
         try:
-            from ..core.audio_utils import load_audio
-            audio, sr = load_audio(voice_data["sample_audio"])
-            self.audio_player.load_audio(audio, sr)
-            self.audio_player.play()
+            # Save sample audio temporarily
+            if self.workspace_dir:
+                temp_path = self.workspace_dir / "temp" / f"voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+                temp_path.parent.mkdir(parents=True, exist_ok=True)
+                temp_path = str(temp_path)
+            else:
+                temp_path = f"output/temp/voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            
+            save_audio(self.sample_audio, self.sample_sr, temp_path)
+            
+            # Save to library with template tests
+            language = self.language_combo.get()
+            
+            voice_id = self.voice_library.save_designed_voice(
+                name=name,
+                description=self.current_description,
+                sample_audio_path=temp_path,
+                tags=tags,
+                language=language,
+                template_test_audios=self.template_test_audios
+            )
+            
+            messagebox.showinfo("Success", f"Voice '{name}' saved to library!")
+            
+            # Clear form
+            self.voice_name_entry.delete(0, "end")
+            self.tags_entry.delete(0, "end")
+            
+            # Refresh other tabs
+            if self.narration_refresh_callback:
+                self.narration_refresh_callback()
+            if self.saved_voices_refresh_callback:
+                self.saved_voices_refresh_callback()
+            
+            logger.info(f"Voice model saved: {name} ({voice_id})")
+            
         except Exception as e:
-            show_error_dialog(e, "playing sample", self)
+            show_error_dialog(e, "saving voice model", self)

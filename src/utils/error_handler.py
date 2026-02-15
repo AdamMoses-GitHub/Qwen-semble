@@ -6,20 +6,53 @@ from typing import Tuple, Optional
 import traceback
 
 
-# Ensure logs directory exists before configuring logging
-Path('output/logs').mkdir(parents=True, exist_ok=True)
-
-# Configure logging with DEBUG level for verbose output
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('output/logs/app.log', encoding='utf-8'),
-        logging.StreamHandler()
-    ]
-)
-
+# Logger will be configured after workspace is determined
 logger = logging.getLogger('Qwen-semble')
+
+
+def configure_logging(workspace_dir: Optional[Path] = None):
+    """Configure logging with workspace-aware paths.
+    
+    Args:
+        workspace_dir: Root workspace directory (if None, uses legacy output/logs)
+    """
+    # Determine log directory
+    if workspace_dir:
+        log_dir = workspace_dir / "logs"
+    else:
+        log_dir = Path('output/logs')
+    
+    # Ensure log directory exists
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    log_file = log_dir / "app.log"
+    
+    # Clear existing handlers
+    logger.handlers.clear()
+    
+    # Configure logging with DEBUG level for verbose output
+    logger.setLevel(logging.DEBUG)
+    
+    # File handler
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    
+    # Stream handler
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.DEBUG)
+    stream_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    stream_handler.setFormatter(stream_formatter)
+    
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+    
+    logger.info(f"Logging configured: {log_file}")
+
+
+# Configure with default legacy path for initial imports
+configure_logging()
 
 
 class QwenTTSError(Exception):

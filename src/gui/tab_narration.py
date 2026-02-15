@@ -15,12 +15,13 @@ from gui.components import AudioPlayerWidget, SegmentListRow
 class NarrationTab(ctk.CTkFrame):
     """Multi-voice narration tab."""
     
-    def __init__(self, parent, tts_engine, voice_library, config):
+    def __init__(self, parent, tts_engine, voice_library, config, workspace_dir=None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.voice_library = voice_library
         self.config = config
+        self.workspace_dir = workspace_dir
         self.parser = TranscriptParser()
         self._base_model_loading = False
         
@@ -388,6 +389,9 @@ class NarrationTab(ctk.CTkFrame):
                                     voice_clone_prompt=voice_prompt
                                 )
                                 logger.debug(f"Cloned voice generation successful")
+                                
+                                # Track usage
+                                self.voice_library.increment_usage(voice_data["id"])
                             except Exception as e:
                                 logger.error(f"Failed to use cloned voice: {e}")
                                 raise
@@ -409,6 +413,9 @@ class NarrationTab(ctk.CTkFrame):
                                     instruct=voice_data.get("description", "")
                                 )
                                 logger.debug(f"Designed voice generation successful")
+                                
+                                # Track usage
+                                self.voice_library.increment_usage(voice_data["id"])
                             except Exception as e:
                                 logger.error(f"Failed to use designed voice: {e}")
                                 raise
@@ -457,7 +464,10 @@ class NarrationTab(ctk.CTkFrame):
                 
                 # Save output
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                output_dir = Path(f"output/narrations/narration_{timestamp}")
+                if self.workspace_dir:
+                    output_dir = self.workspace_dir / "narrations" / f"narration_{timestamp}"
+                else:
+                    output_dir = Path(f"output/narrations/narration_{timestamp}")
                 output_dir.mkdir(parents=True, exist_ok=True)
                 
                 output_file = output_dir / "narration_full.wav"

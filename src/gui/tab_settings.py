@@ -10,12 +10,13 @@ from utils.error_handler import logger
 class SettingsTab(ctk.CTkFrame):
     """Application settings tab."""
     
-    def __init__(self, parent, tts_engine, config, reload_callback):
+    def __init__(self, parent, tts_engine, config, reload_callback, workspace_dir=None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.config = config
         self.reload_callback = reload_callback
+        self.workspace_dir = workspace_dir
         
         self._create_ui()
         
@@ -165,6 +166,26 @@ class SettingsTab(ctk.CTkFrame):
     
     def _create_dirs_section(self, parent) -> None:
         """Create directories section."""
+        # Skip this section in workspace mode (directories managed by workspace)
+        if self.workspace_dir:
+            # Show workspace info instead
+            section = ctk.CTkFrame(parent)
+            section.pack(fill="x", pady=10)
+            
+            title = ctk.CTkLabel(section, text="Workspace", font=("Arial", 14, "bold"))
+            title.pack(pady=10)
+            
+            info_label = ctk.CTkLabel(
+                section,
+                text=f"Active Workspace:\n{self.workspace_dir}",
+                font=("Arial", 11),
+                justify="left"
+            )
+            info_label.pack(padx=20, pady=10)
+            
+            return
+        
+        # Legacy mode - show output directory settings
         section = ctk.CTkFrame(parent)
         section.pack(fill="x", pady=10)
         

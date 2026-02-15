@@ -3,38 +3,78 @@
 import json
 import os
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 
 class Config:
     """Application configuration manager."""
     
-    def __init__(self, config_path: str = "config/app_config.json"):
+    def __init__(self, config_path: str = "config/app_config.json", workspace_dir: Optional[Path] = None):
         """Initialize configuration manager.
         
         Args:
-            config_path: Path to configuration file
+            config_path: Path to configuration file (relative to workspace if workspace_dir provided)
+            workspace_dir: Root workspace directory (if None, uses old structure)
         """
-        self.config_path = Path(config_path)
+        self.workspace_dir = workspace_dir
+        
+        # Resolve config path relative to workspace if provided
+        if workspace_dir:
+            self.config_path = workspace_dir / "config.json"
+        else:
+            self.config_path = Path(config_path)
         self.config: Dict[str, Any] = {}
-        self.defaults = {
-            "device": "cuda:0",
-            "model_size": "1.7B",
-            "theme": "dark",
-            "output_dir": "output/",
-            "models_cache_dir": "",
-            "last_used_speaker": "Ryan",
-            "last_used_language": "Auto",
-            "window_width": 1200,
-            "window_height": 800,
-            "font_size": 100,
-            "use_flash_attention": True,
-            "generation_params": {
-                "max_new_tokens": 2048,
-                "temperature": 0.7,
-                "top_p": 0.9
+        
+        # Set defaults based on workspace mode
+        if workspace_dir:
+            # New workspace mode - paths are relative to workspace
+            self.defaults = {
+                "device": "cuda:0",
+                "model_size": "1.7B",
+                "theme": "dark",
+                "last_used_speaker": "Ryan",
+                "last_used_language": "Auto",
+                "window_width": 1200,
+                "window_height": 800,
+                "font_size": 100,
+                "use_flash_attention": True,
+                "generation_params": {
+                    "max_new_tokens": 2048,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                },
+                "template_test_transcripts": [
+                    "I am a voice model. I was created using the magic of computing.",
+                    "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
+                    "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+                ]
             }
-        }
+        else:
+            # Legacy mode - keep old structure
+            self.defaults = {
+                "device": "cuda:0",
+                "model_size": "1.7B",
+                "theme": "dark",
+                "output_dir": "output/",
+                "models_cache_dir": "",
+                "last_used_speaker": "Ryan",
+                "last_used_language": "Auto",
+                "window_width": 1200,
+                "window_height": 800,
+                "font_size": 100,
+                "use_flash_attention": True,
+                "generation_params": {
+                    "max_new_tokens": 2048,
+                    "temperature": 0.7,
+                    "top_p": 0.9
+                },
+                "template_test_transcripts": [
+                    "I am a voice model. I was created using the magic of computing.",
+                    "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
+                    "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+                ]
+            }
+        
         self.load()
     
     def load(self) -> None:

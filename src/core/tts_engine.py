@@ -1,6 +1,7 @@
 """TTS Engine wrapper for Qwen3-TTS models."""
 
 import torch
+import os
 from typing import Optional, List, Tuple, Union, Callable, Any
 from pathlib import Path
 import numpy as np
@@ -52,7 +53,8 @@ class TTSEngine:
         self,
         device: str = "cuda:0",
         dtype: str = "bfloat16",
-        use_flash_attention: bool = True
+        use_flash_attention: bool = True,
+        workspace_dir: Optional[Path] = None
     ):
         """Initialize TTS engine.
         
@@ -60,10 +62,15 @@ class TTSEngine:
             device: Compute device ('cuda:0', 'cpu', etc.)
             dtype: Data type ('float16' or 'bfloat16')
             use_flash_attention: Whether to use FlashAttention 2
+            workspace_dir: Root workspace directory (for output files, not model cache)
         """
         self.device = device
         self.dtype = torch.bfloat16 if dtype == "bfloat16" else torch.float16
         self.use_flash_attention = use_flash_attention
+        self.workspace_dir = workspace_dir
+        
+        # Note: Models are cached in default HuggingFace cache location (~/.cache/huggingface)
+        # Only output files (voices, narrations, etc.) use workspace_dir
         
         # Model instances
         self.custom_voice_model = None
@@ -180,7 +187,49 @@ class TTSEngine:
                 )
                 logger.debug("Model loaded into memory successfully")
             except Exception as e:
-                if "flash_attn" in str(e).lower() and attn_impl == "flash_attention_2":
+                error_str = str(e)
+                
+                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
+                needs_cache_clear = (
+                    "WinError 1314" in error_str or 
+                    "required privilege is not held" in error_str or
+                    "Can't load feature extractor" in error_str or
+                    "preprocessor_config.json" in error_str or
+                    "is not a local folder and is not a valid model identifier" in error_str
+                )
+                
+                if needs_cache_clear:
+                    logger.error("Corrupted model cache detected - clearing and retrying...")
+                    
+                    # Try to clear the corrupted model cache
+                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
+                    
+                    # Clear from both possible cache locations
+                    for cache_subdir in ['hub', 'transformers']:
+                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
+                        if model_cache.exists():
+                            logger.warning(f"Removing corrupted cache: {model_cache}")
+                            try:
+                                import shutil
+                                shutil.rmtree(model_cache)
+                                logger.info(f"Successfully removed cache: {model_cache}")
+                            except Exception as rm_err:
+                                logger.error(f"Failed to remove cache: {rm_err}")
+                    
+                    # Set environment to definitely disable symlinks
+                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
+                    
+                    # Retry download
+                    logger.info("Retrying fresh model download...")
+                    self.custom_voice_model = Qwen3TTSModel.from_pretrained(
+                        model_name,
+                        device_map=self.device,
+                        dtype=self.dtype,
+                        attn_implementation=attn_impl
+                    )
+                    logger.info("Model loaded successfully after cache clear and retry")
+                    
+                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
                     logger.warning("FlashAttention not available, falling back to standard attention")
                     logger.debug("Retrying model load without FlashAttention...")
                     self.custom_voice_model = Qwen3TTSModel.from_pretrained(
@@ -238,7 +287,44 @@ class TTSEngine:
                     attn_implementation=attn_impl
                 )
             except Exception as e:
-                if "flash_attn" in str(e).lower() and attn_impl == "flash_attention_2":
+                error_str = str(e)
+                
+                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
+                needs_cache_clear = (
+                    "WinError 1314" in error_str or 
+                    "required privilege is not held" in error_str or
+                    "Can't load feature extractor" in error_str or
+                    "preprocessor_config.json" in error_str or
+                    "is not a local folder and is not a valid model identifier" in error_str
+                )
+                
+                if needs_cache_clear:
+                    logger.error("Corrupted model cache detected - clearing and retrying...")
+                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
+                    
+                    # Clear from both possible cache locations
+                    for cache_subdir in ['hub', 'transformers']:
+                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
+                        if model_cache.exists():
+                            logger.warning(f"Removing corrupted cache: {model_cache}")
+                            try:
+                                import shutil
+                                shutil.rmtree(model_cache)
+                                logger.info(f"Successfully removed cache: {model_cache}")
+                            except Exception as rm_err:
+                                logger.error(f"Failed to remove cache: {rm_err}")
+                    
+                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
+                    logger.info("Retrying fresh model download...")
+                    self.voice_design_model = Qwen3TTSModel.from_pretrained(
+                        model_name,
+                        device_map=self.device,
+                        dtype=self.dtype,
+                        attn_implementation=attn_impl
+                    )
+                    logger.info("Model loaded successfully after cache clear and retry")
+                    
+                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
                     logger.warning("FlashAttention not available, falling back to standard attention")
                     self.voice_design_model = Qwen3TTSModel.from_pretrained(
                         model_name,
@@ -294,7 +380,44 @@ class TTSEngine:
                     attn_implementation=attn_impl
                 )
             except Exception as e:
-                if "flash_attn" in str(e).lower() and attn_impl == "flash_attention_2":
+                error_str = str(e)
+                
+                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
+                needs_cache_clear = (
+                    "WinError 1314" in error_str or 
+                    "required privilege is not held" in error_str or
+                    "Can't load feature extractor" in error_str or
+                    "preprocessor_config.json" in error_str or
+                    "is not a local folder and is not a valid model identifier" in error_str
+                )
+                
+                if needs_cache_clear:
+                    logger.error("Corrupted model cache detected - clearing and retrying...")
+                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
+                    
+                    # Clear from both possible cache locations
+                    for cache_subdir in ['hub', 'transformers']:
+                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
+                        if model_cache.exists():
+                            logger.warning(f"Removing corrupted cache: {model_cache}")
+                            try:
+                                import shutil
+                                shutil.rmtree(model_cache)
+                                logger.info(f"Successfully removed cache: {model_cache}")
+                            except Exception as rm_err:
+                                logger.error(f"Failed to remove cache: {rm_err}")
+                    
+                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
+                    logger.info("Retrying fresh model download...")
+                    self.base_model = Qwen3TTSModel.from_pretrained(
+                        model_name,
+                        device_map=self.device,
+                        dtype=self.dtype,
+                        attn_implementation=attn_impl
+                    )
+                    logger.info("Model loaded successfully after cache clear and retry")
+                    
+                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
                     logger.warning("FlashAttention not available, falling back to standard attention")
                     self.base_model = Qwen3TTSModel.from_pretrained(
                         model_name,
