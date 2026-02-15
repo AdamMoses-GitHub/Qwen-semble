@@ -30,6 +30,7 @@ class SavedVoicesTab(ctk.CTkFrame):
         self.audio_player = AudioPlayer()
         
         self.selected_voice = None
+        self.selected_row_frame = None  # Track selected row for highlighting
         self.filter_type = "all"  # all, cloned, designed
         self.search_query = ""
         self.search_tags = []
@@ -60,7 +61,7 @@ class SavedVoicesTab(ctk.CTkFrame):
         list_frame.rowconfigure(2, weight=1)
         
         # Title
-        title = ctk.CTkLabel(list_frame, text="📚 Saved Voices", font=("Arial", 18, "bold"))
+        title = ctk.CTkLabel(list_frame, text="📚 Voice Model Library", font=("Arial", 18, "bold"))
         title.grid(row=0, column=0, pady=(10, 5), sticky="w", padx=10)
         
         # Search and filter section
@@ -120,12 +121,19 @@ class SavedVoicesTab(ctk.CTkFrame):
         self.count_label = ctk.CTkLabel(search_frame, text="0 voices", font=("Arial", 10))
         self.count_label.grid(row=5, column=0, sticky="w", padx=5, pady=5)
         
-        # Voice list (scrollable)
+        # Voice list table (scrollable)
         list_scroll = ctk.CTkScrollableFrame(list_frame)
         list_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
-        list_scroll.columnconfigure(0, weight=1)
+        list_scroll.columnconfigure(0, weight=3)  # Name
+        list_scroll.columnconfigure(1, weight=1)  # Type
+        list_scroll.columnconfigure(2, weight=1)  # Created
+        list_scroll.columnconfigure(3, weight=1)  # Usage
+        list_scroll.columnconfigure(4, weight=2)  # Tags
         
         self.voice_list_frame = list_scroll
+        
+        # Create table header
+        self._create_table_header()
     
     def _create_details_panel(self) -> None:
         """Create voice details panel."""
@@ -147,6 +155,36 @@ class SavedVoicesTab(ctk.CTkFrame):
         
         # Initial empty state
         self._show_empty_details()
+    
+    def _create_table_header(self) -> None:
+        """Create the table header row."""
+        header_frame = ctk.CTkFrame(self.voice_list_frame, fg_color="gray25")
+        header_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=2, pady=(2, 5))
+        header_frame.columnconfigure(0, weight=3)
+        header_frame.columnconfigure(1, weight=1)
+        header_frame.columnconfigure(2, weight=1)
+        header_frame.columnconfigure(3, weight=1)
+        header_frame.columnconfigure(4, weight=2)
+        
+        headers = [
+            ("Name", 0),
+            ("Type", 1),
+            ("Created", 2),
+            ("Usage", 3),
+            ("Tags", 4)
+        ]
+        
+        for text, col in headers:
+            label = ctk.CTkLabel(
+                header_frame,
+                text=text,
+                font=("Arial", 11, "bold"),
+                anchor="w"
+            )
+            label.grid(row=0, column=col, sticky="ew", padx=8, pady=5)
+        
+        # Store reference for later removal during refresh
+        self.table_header = header_frame
     
     def _show_empty_details(self) -> None:
         """Show empty state in details panel."""
@@ -196,6 +234,12 @@ class SavedVoicesTab(ctk.CTkFrame):
         for widget in self.voice_list_frame.winfo_children():
             widget.destroy()
         
+        # Clear selected row reference
+        self.selected_row_frame = None
+        
+        # Recreate table header
+        self._create_table_header()
+        
         # Get filtered voices
         voice_type = None if self.filter_type == "all" else self.filter_type
         
@@ -214,9 +258,9 @@ class SavedVoicesTab(ctk.CTkFrame):
         # Update count
         self.count_label.configure(text=f"{len(voices)} voice{'s' if len(voices) != 1 else ''}")
         
-        # Create voice items
-        for voice in voices:
-            self._create_voice_item(voice)
+        # Create voice items as table rows
+        for idx, voice in enumerate(voices):
+            self._create_voice_row(voice, idx + 1)
         
         # Show message if no voices
         if not voices:
@@ -225,60 +269,117 @@ class SavedVoicesTab(ctk.CTkFrame):
                 text="No voices found" if self.search_query or self.search_tags else "No saved voices yet",
                 text_color="gray"
             )
-            no_voices_label.pack(pady=20)
+            no_voices_label.grid(row=1, column=0, columnspan=5, pady=20)
     
-    def _create_voice_item(self, voice: dict) -> None:
-        """Create a voice list item.
+    def _create_voice_row(self, voice: dict, row_num: int) -> None:
+        """Create a voice table row.
         
         Args:
             voice: Voice data dictionary
+            row_num: Row number in the table
         """
-        item_frame = ctk.CTkFrame(self.voice_list_frame)
-        item_frame.pack(fill="x", pady=5, padx=5)
-        item_frame.columnconfigure(0, weight=1)
+        # Create clickable row frame
+        row_frame = ctk.CTkFrame(
+            self.voice_list_frame,
+            fg_color="gray20" if row_num % 2 == 0 else "gray15",
+            cursor="hand2"
+        )
+        row_frame.grid(row=row_num, column=0, columnspan=5, sticky="ew", padx=2, pady=1)
+        row_frame.columnconfigure(0, weight=3)
+        row_frame.columnconfigure(1, weight=1)
+        row_frame.columnconfigure(2, weight=1)
+        row_frame.columnconfigure(3, weight=1)
+        row_frame.columnconfigure(4, weight=2)
         
-        # Voice name and type
+        # Name column
         name_label = ctk.CTkLabel(
-            item_frame,
+            row_frame,
             text=voice["name"],
-            font=("Arial", 12, "bold"),
+            font=("Arial", 11),
             anchor="w"
         )
-        name_label.grid(row=0, column=0, sticky="ew", padx=10, pady=(10, 2))
+        name_label.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
         
-        # Type badge
+        # Type column
         type_color = "#4a90e2" if voice["type"] == "cloned" else "#e24a90"
         type_label = ctk.CTkLabel(
-            item_frame,
-            text=voice["type"].upper(),
-            font=("Arial", 9),
+            row_frame,
+            text=voice["type"].capitalize(),
+            font=("Arial", 10),
             text_color=type_color,
             anchor="w"
         )
-        type_label.grid(row=1, column=0, sticky="w", padx=10)
+        type_label.grid(row=0, column=1, sticky="ew", padx=8, pady=6)
         
-        # Tags
-        if voice.get("tags"):
-            tags_text = ", ".join(f"#{tag}" for tag in voice["tags"])
-            tags_label = ctk.CTkLabel(
-                item_frame,
-                text=tags_text,
-                font=("Arial", 9),
-                text_color="gray",
-                anchor="w"
-            )
-            tags_label.grid(row=2, column=0, sticky="w", padx=10, pady=(2, 5))
+        # Created column
+        created_date = self._format_date_short(voice.get("created", ""))
+        created_label = ctk.CTkLabel(
+            row_frame,
+            text=created_date,
+            font=("Arial", 10),
+            text_color="gray",
+            anchor="w"
+        )
+        created_label.grid(row=0, column=2, sticky="ew", padx=8, pady=6)
         
-        # Click to select
-        def select_voice():
+        # Usage column
+        usage_count = voice.get("usage_count", 0)
+        usage_label = ctk.CTkLabel(
+            row_frame,
+            text=str(usage_count),
+            font=("Arial", 10),
+            text_color="gray",
+            anchor="w"
+        )
+        usage_label.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
+        
+        # Tags column
+        tags_text = ", ".join(voice.get("tags", [])[:3])  # Show first 3 tags
+        if len(voice.get("tags", [])) > 3:
+            tags_text += "..."
+        tags_label = ctk.CTkLabel(
+            row_frame,
+            text=tags_text if tags_text else "-",
+            font=("Arial", 10),
+            text_color="gray",
+            anchor="w"
+        )
+        tags_label.grid(row=0, column=4, sticky="ew", padx=8, pady=6)
+        
+        # Click handler
+        def select_voice(e=None):
+            # Unhighlight previous selection
+            if self.selected_row_frame:
+                # Restore original color based on row number
+                orig_color = "gray20" if row_num % 2 == 0 else "gray15"
+                self.selected_row_frame.configure(fg_color=orig_color)
+            
+            # Highlight this row
+            row_frame.configure(fg_color="gray30")
+            self.selected_row_frame = row_frame
+            
+            # Show voice details
             self._select_voice(voice)
         
-        item_frame.bind("<Button-1>", lambda e: select_voice())
-        name_label.bind("<Button-1>", lambda e: select_voice())
-        type_label.bind("<Button-1>", lambda e: select_voice())
+        # Bind click events
+        row_frame.bind("<Button-1>", select_voice)
+        for widget in [name_label, type_label, created_label, usage_label, tags_label]:
+            widget.bind("<Button-1>", select_voice)
+    
+    def _format_date_short(self, iso_date: str) -> str:
+        """Format ISO date string to short format.
         
-        # Make it look clickable
-        item_frame.configure(cursor="hand2")
+        Args:
+            iso_date: ISO format date string
+            
+        Returns:
+            Short formatted date string
+        """
+        try:
+            dt = datetime.fromisoformat(iso_date)
+            return dt.strftime("%Y-%m-%d")
+        except:
+            return "Unknown"
     
     def _select_voice(self, voice: dict) -> None:
         """Select and show voice details.
@@ -367,12 +468,30 @@ class SavedVoicesTab(ctk.CTkFrame):
             ref_text.insert("1.0", voice.get("ref_text", ""))
             ref_text.configure(state="disabled")
             
+            # Reference audio
+            ref_audio_path = voice.get("ref_audio", "")
+            if ref_audio_path and Path(ref_audio_path).exists():
+                ref_audio_frame = ctk.CTkFrame(self.details_content_frame)
+                ref_audio_frame.pack(fill="x", pady=10)
+                
+                ref_audio_title = ctk.CTkLabel(ref_audio_frame, text="Reference Audio:", font=("Arial", 12, "bold"))
+                ref_audio_title.pack(anchor="w", pady=5)
+                
+                # Play button
+                play_ref_btn = ctk.CTkButton(
+                    ref_audio_frame,
+                    text="▶ Play Reference Audio",
+                    command=lambda: self._play_reference_audio(ref_audio_path),
+                    width=180
+                )
+                play_ref_btn.pack(padx=10, pady=5, anchor="w")
+            
         elif voice["type"] == "designed":
             # Description
             desc_frame = ctk.CTkFrame(self.details_content_frame)
             desc_frame.pack(fill="x", pady=10)
             
-            desc_title = ctk.CTkLabel(desc_frame, text="Description:", font=("Arial", 12, "bold"))
+            desc_title = ctk.CTkLabel(desc_frame, text="Design Description:", font=("Arial", 12, "bold"))
             desc_title.pack(anchor="w", pady=5)
             
             desc_text = ctk.CTkTextbox(desc_frame, height=80, wrap="word")
@@ -553,6 +672,29 @@ class SavedVoicesTab(ctk.CTkFrame):
             logger.error(f"Failed to play template test audio: {e}")
             # Don't show error dialog to user for playback errors, just log it
             messagebox.showerror("Playback Error", f"Failed to play template test audio:\n{e}")
+    
+    def _play_reference_audio(self, audio_path: str) -> None:
+        """Play reference audio for a cloned voice.
+        
+        Args:
+            audio_path: Path to reference audio file
+        """
+        try:
+            from core.audio_utils import load_audio
+            
+            if Path(audio_path).exists():
+                audio_data, sample_rate = load_audio(audio_path)
+                
+                # Play using the audio player directly
+                self.audio_player.play(audio_data, sample_rate)
+                
+                logger.info(f"Playing reference audio: {audio_path}")
+            else:
+                logger.warning(f"Reference audio file not found: {audio_path}")
+                messagebox.showwarning("File Not Found", f"Reference audio file not found:\n{audio_path}")
+        except Exception as e:
+            logger.error(f"Failed to play reference audio: {e}")
+            messagebox.showerror("Playback Error", f"Failed to play reference audio:\n{e}")
     
     def _delete_voice(self, voice: dict) -> None:
         """Delete a voice from the library.

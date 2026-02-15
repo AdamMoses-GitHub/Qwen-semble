@@ -134,7 +134,7 @@ class QwenTTSApp(ctk.CTk):
         # Add tabs
         self.tabview.add("Voice Creation")
         self.tabview.add("Narration")
-        self.tabview.add("Saved Voices")
+        self.tabview.add("Voice Model Library")
         self.tabview.add("Settings")
         
         # Create tab content (will be initialized after models load)
@@ -146,9 +146,9 @@ class QwenTTSApp(ctk.CTk):
     def _init_tabs(self) -> None:
         """Initialize tab content after models are loaded."""
         try:
-            # Saved Voices tab (create first so we can refresh it)
+            # Voice Model Library tab (create first so we can refresh it)
             self.saved_voices_tab = SavedVoicesTab(
-                self.tabview.tab("Saved Voices"),
+                self.tabview.tab("Voice Model Library"),
                 self.voice_library,
                 self.config,
                 workspace_dir=self.workspace_dir
