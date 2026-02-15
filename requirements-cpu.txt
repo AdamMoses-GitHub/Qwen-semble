@@ -1,0 +1,19 @@
+# Qwen-semble - TTS Voice Studio Requirements (CPU-Only Version)
+
+# GUI Framework
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# TTS Engine
+qwen-tts>=1.0.0
+torch>=2.0.0
+transformers>=4.30.0
+accelerate>=0.20.0
+
+# Audio Processing
+soundfile>=0.12.0
+sounddevice>=0.4.6
+numpy>=1.24.0,<2.0.0
+
+# Utilities
+huggingface-hub>=0.20.0

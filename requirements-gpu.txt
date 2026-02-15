@@ -1,0 +1,32 @@
+# Qwen-semble - TTS Voice Studio Requirements (GPU Version)
+# 
+# Installation Instructions:
+# 1. Install PyTorch with CUDA first:
+#    pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
+# 2. Install other requirements:
+#    pip install -r requirements-gpu.txt
+#
+# 3. Install Flash Attention (optional but recommended for GPU):
+#    pip install flash-attn --no-build-isolation
+
+# GUI Framework
+customtkinter>=5.2.0
+pillow>=10.0.0
+
+# TTS Engine
+qwen-tts>=1.0.0
+transformers>=4.30.0
+accelerate>=0.20.0
+
+# Audio Processing
+soundfile>=0.12.0
+sounddevice>=0.4.6
+numpy>=1.24.0,<2.0.0
+
+# Utilities
+huggingface-hub>=0.20.0
+
+# Note: PyTorch with CUDA support must be installed separately (see instructions above)
+# torch>=2.0.0+cu121 is not directly installable via requirements.txt
+# Use: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
