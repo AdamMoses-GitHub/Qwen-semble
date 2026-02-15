@@ -44,3 +44,4 @@ config/voice_library.json
 # OS
 .DS_Store
 Thumbs.db
+working_dir.conf
