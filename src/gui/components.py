@@ -354,8 +354,7 @@ class SegmentListRow(ctk.CTkFrame):
         parent,
         segment_id: int,
         text_preview: str,
-        voices: List[str],
-        on_voice_change: Optional[Callable] = None,
+        on_voice_select: Optional[Callable] = None,
         **kwargs
     ):
         """Initialize segment list row.
@@ -364,65 +363,79 @@ class SegmentListRow(ctk.CTkFrame):
             parent: Parent widget
             segment_id: Segment ID
             text_preview: Preview of segment text
-            voices: Available voice options
-            on_voice_change: Callback when voice selection changes
+            on_voice_select: Callback(segment_id) when select button clicked
             **kwargs: Additional frame arguments
         """
         super().__init__(parent, **kwargs)
         
         self.segment_id = segment_id
-        self.on_voice_change = on_voice_change
+        self.on_voice_select = on_voice_select
+        self.selected_voice_data = None
+        
+        # Configure grid
+        self.columnconfigure(0, weight=0)  # Segment number
+        self.columnconfigure(1, weight=1)  # Text preview
+        self.columnconfigure(2, weight=0)  # Voice label
+        self.columnconfigure(3, weight=0)  # Select button
         
         # Segment number
         self.id_label = ctk.CTkLabel(
             self,
             text=f"{segment_id + 1}.",
-            width=40
+            width=40,
+            font=("Arial", 11, "bold")
         )
-        self.id_label.pack(side="left", padx=5)
+        self.id_label.grid(row=0, column=0, sticky="w", padx=(5, 2))
         
         # Text preview
         self.text_label = ctk.CTkLabel(
             self,
             text=text_preview,
-            width=400,
-            anchor="w"
+            anchor="w",
+            font=("Arial", 11)
         )
-        self.text_label.pack(side="left", padx=5, fill="x", expand=True)
+        self.text_label.grid(row=0, column=1, sticky="w", padx=5)
         
-        # Voice selector
-        self.voice_combo = ctk.CTkComboBox(
+        # Assigned voice label
+        self.voice_label = ctk.CTkLabel(
             self,
-            values=voices,
-            command=self._on_voice_selected,
+            text="Not assigned",
+            text_color="gray",
+            anchor="w",
             width=150
         )
-        self.voice_combo.pack(side="right", padx=5)
+        self.voice_label.grid(row=0, column=2, sticky="w", padx=5)
         
-        if voices:
-            self.voice_combo.set(voices[0])
+        # Select voice button
+        self.select_button = ctk.CTkButton(
+            self,
+            text="Select Voice",
+            width=120,
+            command=self._on_button_clicked
+        )
+        self.select_button.grid(row=0, column=3, sticky="e", padx=5)
     
-    def _on_voice_selected(self, voice: str) -> None:
-        """Handle voice selection.
-        
-        Args:
-            voice: Selected voice name
-        """
-        if self.on_voice_change:
-            self.on_voice_change(self.segment_id, voice)
+    def _on_button_clicked(self) -> None:
+        """Handle select button click."""
+        if self.on_voice_select:
+            self.on_voice_select(self.segment_id)
     
-    def get_selected_voice(self) -> str:
-        """Get currently selected voice.
-        
-        Returns:
-            Selected voice name
-        """
-        return self.voice_combo.get()
-    
-    def set_voice(self, voice: str) -> None:
+    def set_voice(self, voice_data: dict) -> None:
         """Set selected voice.
         
         Args:
-            voice: Voice name to select
+            voice_data: Voice data dictionary with 'name' and 'type'
         """
-        self.voice_combo.set(voice)
+        self.selected_voice_data = voice_data
+        voice_name = voice_data['name']
+        voice_type = voice_data.get('type', 'preset')
+        display_text = f"{voice_name} ({voice_type})"
+        self.voice_label.configure(text=display_text, text_color="white")
+    
+    def get_selected_voice(self) -> Optional[dict]:
+        """Get currently selected voice data.
+        
+        Returns:
+            Selected voice data dictionary or None
+        """
+        return self.selected_voice_data

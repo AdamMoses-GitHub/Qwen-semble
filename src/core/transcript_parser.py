@@ -82,28 +82,37 @@ class TranscriptParser:
         return [TranscriptSegment(text=text.strip(), voice=voice, segment_id=0)]
     
     def _parse_manual(self, text: str) -> List[TranscriptSegment]:
-        """Parse text into sentences for manual voice assignment.
+        """Parse text into segments by blank lines for manual voice assignment.
+        
+        Segments are separated by blank lines (double newlines). Text within a segment
+        can span multiple lines, but a blank line creates a new segment.
         
         Args:
             text: Transcript text
             
         Returns:
-            List of segments (one per sentence)
+            List of segments (one per text block separated by blank lines)
         """
-        logger.debug("Splitting text into sentences for manual assignment...")
+        logger.debug("Splitting text into segments by blank lines...")
         segments = []
-        sentences = self._split_into_sentences(text)
-        logger.debug(f"Found {len(sentences)} sentences")
         
-        for i, sentence in enumerate(sentences):
-            if sentence.strip():
+        # Split by blank lines (one or more consecutive newlines with optional whitespace)
+        # This regex matches: newline, optional whitespace, newline (handles \n\n or \r\n\r\n)
+        blocks = re.split(r'\n\s*\n', text)
+        
+        logger.debug(f"Found {len(blocks)} text blocks")
+        
+        for i, block in enumerate(blocks):
+            # Strip whitespace but preserve internal line breaks
+            cleaned_block = block.strip()
+            if cleaned_block:
                 segments.append(TranscriptSegment(
-                    text=sentence.strip(),
+                    text=cleaned_block,
                     voice=None,
                     segment_id=i
                 ))
         
-        logger.info(f"Parsed {len(segments)} sentences for manual assignment")
+        logger.info(f"Parsed {len(segments)} segments for manual assignment")
         return segments
     
     def _parse_annotated(

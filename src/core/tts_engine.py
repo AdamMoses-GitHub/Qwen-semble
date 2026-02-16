@@ -495,6 +495,42 @@ class TTSEngine:
             logger.error(f"Failed to generate custom voice audio: {e}")
             raise GenerationError(f"Failed to generate audio: {e}")
     
+    def generate_voice_preset(
+        self,
+        text: Union[str, List[str]],
+        preset_name: str,
+        language: Union[str, List[str]] = "Auto",
+        instruct: Union[str, List[str]] = "",
+        **generation_kwargs
+    ) -> Tuple[List[np.ndarray], int]:
+        """Generate audio using a built-in preset voice.
+        
+        This is a convenience wrapper around generate_custom_voice() for library-stored preset voices.
+        
+        Args:
+            text: Text to synthesize (string or list of strings)
+            preset_name: Name of preset voice (e.g., "Vivian", "Serena")
+            language: Language(s) for synthesis
+            instruct: Optional instruction(s) for style control
+            **generation_kwargs: Additional generation parameters
+            
+        Returns:
+            Tuple of (list of audio arrays, sample rate)
+        """
+        if preset_name not in self.get_supported_speakers():
+            raise ValueError(f"Unknown preset voice: {preset_name}. Available: {self.get_supported_speakers()}")
+        
+        logger.info(f"Generating audio with preset voice: {preset_name}")
+        
+        # Use generate_custom_voice with the preset speaker name
+        return self.generate_custom_voice(
+            text=text,
+            language=language,
+            speaker=preset_name,
+            instruct=instruct,
+            **generation_kwargs
+        )
+    
     def generate_voice_design(
         self,
         text: Union[str, List[str]],

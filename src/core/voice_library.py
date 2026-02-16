@@ -33,6 +33,7 @@ class VoiceLibrary:
             self.designed_voices_dir = Path("output/designed_voices")
         
         self.library: Dict[str, List[Dict]] = {
+            "preset_voices": [],
             "cloned_voices": [],
             "designed_voices": []
         }
@@ -49,12 +50,15 @@ class VoiceLibrary:
             if self.library_path.exists():
                 with open(self.library_path, 'r', encoding='utf-8') as f:
                     self.library = json.load(f)
-                logger.info(f"Voice library loaded: {len(self.library['cloned_voices'])} cloned, {len(self.library['designed_voices'])} designed")
+                # Ensure preset_voices section exists
+                if "preset_voices" not in self.library:
+                    self.library["preset_voices"] = []
+                logger.info(f"Voice library loaded: {len(self.library.get('preset_voices', []))} preset, {len(self.library['cloned_voices'])} cloned, {len(self.library['designed_voices'])} designed")
             else:
                 self.save()
         except Exception as e:
             logger.error(f"Error loading voice library: {e}")
-            self.library = {"cloned_voices": [], "designed_voices": []}
+            self.library = {"preset_voices": [], "cloned_voices": [], "designed_voices": []}
     
     def save(self) -> None:
         """Save voice library to file."""
@@ -418,7 +422,7 @@ class VoiceLibrary:
         """Get all voices or voices of specific type.
         
         Args:
-            voice_type: Optional filter ('cloned' or 'designed')
+            voice_type: Optional filter ('cloned', 'designed', or 'preset')
             
         Returns:
             List of voice data dictionaries
@@ -427,9 +431,12 @@ class VoiceLibrary:
             return self.library["cloned_voices"].copy()
         elif voice_type == "designed":
             return self.library["designed_voices"].copy()
+        elif voice_type == "preset":
+            return self.library.get("preset_voices", []).copy()
         else:
             # Return all voices
-            return self.library["cloned_voices"] + self.library["designed_voices"]
+            preset_voices = self.library.get("preset_voices", [])
+            return preset_voices + self.library["cloned_voices"] + self.library["designed_voices"]
     
     def get_voice(self, voice_id: str) -> Optional[Dict]:
         """Get voice data by ID.
@@ -645,3 +652,52 @@ class VoiceLibrary:
             json.dump(export_data, f, indent=2)
         
         logger.info(f"Voice exported: {voice_id} to {export_path}")
+    
+    def import_preset_voices(self, tts_engine) -> int:
+        """Auto-import engine preset voices to library on first launch.
+        
+        Args:
+            tts_engine: TTSEngine instance to get supported speakers
+            
+        Returns:
+            Number of presets imported
+        """
+        # Get speaker info from engine
+        speakers_info = tts_engine.SPEAKERS
+        
+        # Add preset_voices section if it doesn't exist
+        if "preset_voices" not in self.library:
+            self.library["preset_voices"] = []
+        
+        imported_count = 0
+        
+        for speaker_info in speakers_info:
+            speaker_name = speaker_info["name"]
+            voice_id = f"preset_{speaker_name.lower()}"
+            
+            # Check if already imported
+            if any(v.get("id") == voice_id for v in self.library["preset_voices"]):
+                continue
+            
+            # Add to library
+            preset_voice = {
+                "id": voice_id,
+                "name": speaker_name,
+                "type": "preset",
+                "preset_name": speaker_name,
+                "language": speaker_info.get("language", "Multi"),
+                "description": speaker_info.get("description", ""),
+                "tags": ["preset", "built-in"],
+                "created": datetime.now().isoformat(),
+                "usage_count": 0
+            }
+            
+            self.library["preset_voices"].append(preset_voice)
+            imported_count += 1
+            logger.debug(f"Imported preset voice: {speaker_name}")
+        
+        if imported_count > 0:
+            self.save()
+            logger.info(f"Imported {imported_count} preset voices to library")
+        
+        return imported_count

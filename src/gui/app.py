@@ -335,6 +335,16 @@ class QwenTTSApp(ctk.CTk):
             else:
                 logger.info("Model loading successful, proceeding with tab initialization")
             
+            # Import preset voices to library (one-time, idempotent)
+            if self.tts_engine and hasattr(self.tts_engine, 'get_supported_speakers'):
+                logger.debug("Importing preset voices to library...")
+                try:
+                    imported = self.voice_library.import_preset_voices(self.tts_engine)
+                    if imported > 0:
+                        logger.info(f"Successfully imported {imported} preset voices")
+                except Exception as e:
+                    logger.warning(f"Failed to import preset voices: {e}")
+            
             # Initialize tabs
             logger.debug("Starting tab initialization...")
             self._init_tabs()
