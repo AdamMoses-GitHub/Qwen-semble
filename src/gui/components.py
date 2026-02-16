@@ -451,3 +451,205 @@ class SegmentListRow(ctk.CTkFrame):
             Selected voice data dictionary or None
         """
         return self.selected_voice_data
+
+
+class ColoredSegmentLabel(ctk.CTkFrame):
+    """Widget for displaying a colored text segment in the preview panel."""
+    
+    def __init__(
+        self,
+        parent,
+        segment_number: Optional[int],
+        total_segments: Optional[int],
+        text_content: str,
+        color: str,
+        on_click: Optional[Callable] = None,
+        **kwargs
+    ):
+        """Initialize colored segment label.
+        
+        Args:
+            parent: Parent widget
+            segment_number: Segment number (None for speaker mode)
+            total_segments: Total segments (None for speaker mode)
+            text_content: Text to display
+            color: Color for the text
+            on_click: Callback when clicked
+            **kwargs: Additional frame arguments
+        """
+        super().__init__(parent, fg_color="transparent", **kwargs)
+        
+        self.on_click = on_click
+        
+        # Get theme colors
+        colors = get_theme_colors()
+        
+        # Create container that can be clicked
+        container = ctk.CTkFrame(self, fg_color="transparent", cursor="hand2" if on_click else "arrow")
+        container.pack(fill="x", pady=2)
+        
+        if on_click:
+            container.bind("<Button-1>", lambda e: on_click())
+        
+        # Segment number prefix (if provided)
+        if segment_number is not None and total_segments is not None:
+            prefix = f"({segment_number} of {total_segments}) "
+        else:
+            prefix = ""
+        
+        # Truncate long text
+        max_length = 150
+        display_text = prefix + (text_content[:max_length] + "..." if len(text_content) > max_length else text_content)
+        
+        # Colored text label
+        text_label = ctk.CTkLabel(
+            container,
+            text=display_text,
+            text_color=color,
+            font=("Arial", 11),
+            anchor="w",
+            justify="left"
+        )
+        text_label.pack(fill="x", padx=5, pady=2)
+        
+        if on_click:
+            text_label.bind("<Button-1>", lambda e: on_click())
+
+
+class ColoredPreviewWindow(ctk.CTkToplevel):
+    """Window for displaying colored transcript preview."""
+    
+    def __init__(
+        self,
+        parent,
+        segments: list,
+        parser,
+        colors: list,
+        mode: str,
+        speaker_assignment_panel=None
+    ):
+        """Initialize colored preview window.
+        
+        Args:
+            parent: Parent widget
+            segments: List of transcript segments
+            parser: TranscriptParser instance
+            colors: Color palette array
+            mode: Current mode ("manual" or "annotated")
+            speaker_assignment_panel: SpeakerAssignmentPanel (for annotated mode)
+        """
+        super().__init__(parent)
+        
+        self.segments = segments
+        self.parser = parser
+        self.colors = colors
+        self.mode = mode
+        self.speaker_assignment_panel = speaker_assignment_panel
+        
+        # Window configuration
+        self.title("Colored Transcript Preview")
+        self.geometry("900x600")
+        
+        # Make window modal
+        self.transient(parent)
+        self.grab_set()
+        
+        self._create_ui()
+    
+    def _create_ui(self) -> None:
+        """Create window UI."""
+        # Title
+        title = ctk.CTkLabel(
+            self,
+            text="Colored Transcript Preview",
+            font=("Arial", 16, "bold")
+        )
+        title.pack(pady=10)
+        
+        # Info label
+        mode_text = "Segment Mode" if self.mode == "manual" else "Speaker Mode"
+        info = ctk.CTkLabel(
+            self,
+            text=f"Showing segments/speakers with matching colors from assignment list ({mode_text})",
+            text_color="gray",
+            font=("Arial", 11)
+        )
+        info.pack(pady=(0, 10))
+        
+        # Scrollable frame for colored segments
+        self.content_frame = ctk.CTkScrollableFrame(self)
+        self.content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Render colored content
+        self._render_content()
+        
+        # Close button
+        close_btn = ctk.CTkButton(
+            self,
+            text="Close",
+            command=self.destroy,
+            width=120
+        )
+        close_btn.pack(pady=10)
+    
+    def _render_content(self) -> None:
+        """Render colored segments in the content frame."""
+        if len(self.segments) == 0:
+            empty_label = ctk.CTkLabel(
+                self.content_frame,
+                text="No segments to display",
+                text_color="gray",
+                font=("Arial", 12)
+            )
+            empty_label.pack(pady=20)
+            return
+        
+        # Limit to first 50 items for performance
+        max_show = min(50, len(self.segments))
+        
+        if self.mode == "manual":
+            # Segment mode: show each segment with its text
+            for i, segment in enumerate(self.segments[:max_show]):
+                segment_color = self.colors[i % len(self.colors)]
+                preview_text = self.parser.preview_segment(segment, max_length=150)
+                
+                # Create colored segment label
+                segment_label = ColoredSegmentLabel(
+                    self.content_frame,
+                    segment_number=i + 1,
+                    total_segments=len(self.segments),
+                    text_content=preview_text,
+                    color=segment_color,
+                    on_click=None  # No click action in window
+                )
+                segment_label.pack(fill="x", pady=3, padx=5)
+        
+        elif self.mode == "annotated":
+            # Speaker mode: display segments in original order with speaker colors
+            if self.speaker_assignment_panel:
+                for i, segment in enumerate(self.segments[:max_show]):
+                    # In annotated mode, the speaker name is stored in segment.voice
+                    speaker = segment.voice if segment.voice else "Unknown"
+                    speaker_color = self.speaker_assignment_panel.get_speaker_color(speaker)
+                    
+                    preview_text = self.parser.preview_segment(segment, max_length=150)
+                    
+                    segment_label = ColoredSegmentLabel(
+                        self.content_frame,
+                        segment_number=None,
+                        total_segments=None,
+                        text_content=preview_text,
+                        color=speaker_color,
+                        on_click=None
+                    )
+                    segment_label.pack(fill="x", pady=3, padx=5)
+        
+        # Show "more" indicator if truncated
+        if len(self.segments) > max_show:
+            more_label = ctk.CTkLabel(
+                self.content_frame,
+                text=f"... and {len(self.segments) - max_show} more segments",
+                text_color="gray",
+                font=("Arial", 11)
+            )
+            more_label.pack(pady=10)

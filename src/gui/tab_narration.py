@@ -10,7 +10,7 @@ from core.audio_utils import save_audio, merge_audio_segments
 from utils.error_handler import logger, show_error_dialog
 from utils.threading_helpers import CancellableWorker
 from utils.theme import get_theme_colors
-from gui.components import AudioPlayerWidget, SegmentListRow
+from gui.components import AudioPlayerWidget, SegmentListRow, ColoredPreviewWindow
 from gui.voice_browser import VoiceBrowserWidget
 from gui.speaker_assignment import SpeakerAssignmentPanel
 
@@ -42,6 +42,9 @@ class NarrationTab(ctk.CTkFrame):
         
         # Segment rows for manual mode
         self.segment_rows = {}
+        
+        # Colored preview button reference
+        self.colored_preview_button = None
         
         self._create_ui()
         
@@ -143,6 +146,16 @@ class NarrationTab(ctk.CTkFrame):
         )
         parse_btn.pack(side="left", padx=5)
         
+        # Show Colored Preview button
+        self.colored_preview_button = ctk.CTkButton(
+            button_container,
+            text="Show Colored Preview",
+            command=self._show_colored_preview,
+            width=180,
+            state="disabled"
+        )
+        self.colored_preview_button.pack(side="left", padx=5)
+        
         # Transcript text
         self.transcript_textbox = ctk.CTkTextbox(panel, height=200)
         self.transcript_textbox.pack(fill="both", expand=True, padx=10, pady=5)
@@ -235,6 +248,38 @@ class NarrationTab(ctk.CTkFrame):
         
         # Initialize with single voice mode UI
         self._update_mode_ui("single")
+    
+    def _get_color_palette(self):
+        """Get the shared color palette for segments and speakers.
+        
+        Returns:
+            list: Array of 8 distinct colors
+        """
+        return [
+            "#3b82f6",  # blue
+            "#ec4899",  # pink
+            "#10b981",  # green
+            "#f59e0b",  # amber
+            "#8b5cf6",  # violet
+            "#ef4444",  # red
+            "#14b8a6",  # teal
+            "#f97316",  # orange
+        ]
+    
+    def _show_colored_preview(self) -> None:
+        """Open window showing colored transcript preview."""
+        if len(self.segments) == 0:
+            return
+        
+        # Open colored preview window
+        ColoredPreviewWindow(
+            self,
+            segments=self.segments,
+            parser=self.parser,
+            colors=self._get_color_palette(),
+            mode=self.mode_var.get(),
+            speaker_assignment_panel=self.speaker_assignment_panel
+        )
     
     def _load_transcript(self) -> None:
         """Load transcript from file."""
@@ -458,17 +503,8 @@ class NarrationTab(ctk.CTkFrame):
             self._update_parse_status()
             return
         
-        # Generate distinct colors for segments
-        segment_colors = [
-            "#3b82f6",  # blue
-            "#ec4899",  # pink
-            "#10b981",  # green
-            "#f59e0b",  # amber
-            "#8b5cf6",  # violet
-            "#ef4444",  # red
-            "#14b8a6",  # teal
-            "#f97316",  # orange
-        ]
+        # Get shared color palette for segments
+        segment_colors = self._get_color_palette()
         
         # Show first 50 segments (performance)
         max_show = min(50, len(self.segments))
@@ -766,10 +802,22 @@ class NarrationTab(ctk.CTkFrame):
                 text_color=colors["text_secondary"]
             )
             self.generate_button.configure(state="disabled")
+            # Disable colored preview button
+            if self.colored_preview_button:
+                self.colored_preview_button.configure(state="disabled")
             return
         
         # Transcript has content - check mode
         mode = self.mode_var.get()
+        
+        # Update colored preview button state based on mode
+        if self.colored_preview_button:
+            if mode in ["manual", "annotated"] and len(self.segments) > 0:
+                # Enable preview button for segment/speaker modes with segments
+                self.colored_preview_button.configure(state="normal")
+            else:
+                # Disable for single mode or when no segments
+                self.colored_preview_button.configure(state="disabled")
         
         if mode == "single":
             # Single voice mode - always green success message and enable generate
