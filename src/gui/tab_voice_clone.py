@@ -390,12 +390,16 @@ class VoiceCloneTab(ctk.CTkFrame):
             
             # Generate all template tests
             template_audios = {}
+            gen_params = self.config.get("generation_params", {})
+            logger.debug(f"Using generation params: {gen_params}")
+            
             for idx, text in enumerate(template_texts):
                 logger.info(f"Generating template test {idx+1}/3...")
                 wavs, sr = self.tts_engine.generate_voice_clone(
                     text=text,
                     language="Auto",
-                    voice_clone_prompt=voice_prompt
+                    voice_clone_prompt=voice_prompt,
+                    **gen_params
                 )
                 template_audios[idx] = (wavs[0], sr)
             
@@ -460,10 +464,12 @@ class VoiceCloneTab(ctk.CTkFrame):
         
         def generate_task():
             """Background generation task."""
+            gen_params = self.config.get("generation_params", {})
             wavs, sr = self.tts_engine.generate_voice_clone(
                 text=test_text,
                 language="Auto",
-                voice_clone_prompt=self.current_voice_prompt
+                voice_clone_prompt=self.current_voice_prompt,
+                **gen_params
             )
             return wavs[0], sr
         

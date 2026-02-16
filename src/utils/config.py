@@ -41,7 +41,9 @@ class Config:
                 "generation_params": {
                     "max_new_tokens": 2048,
                     "temperature": 0.7,
-                    "top_p": 0.9
+                    "top_p": 0.9,
+                    "do_sample": True,
+                    "repetition_penalty": 1.0
                 },
                 "template_test_transcripts": [
                     "I am a voice model. I was created using the magic of computing.",
@@ -93,7 +95,9 @@ class Config:
                 "generation_params": {
                     "max_new_tokens": 2048,
                     "temperature": 0.7,
-                    "top_p": 0.9
+                    "top_p": 0.9,
+                    "do_sample": True,
+                    "repetition_penalty": 1.0
                 },
                 "template_test_transcripts": [
                     "I am a voice model. I was created using the magic of computing.",

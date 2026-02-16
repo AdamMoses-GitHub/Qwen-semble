@@ -759,12 +759,16 @@ class VoiceCreationTab(ctk.CTkFrame):
             
             # Generate template tests
             template_audios = {}
+            gen_params = self.config.get("generation_params", {})
+            logger.debug(f"Using generation params: {gen_params}")
+            
             for idx, text in enumerate(template_texts):
                 logger.info(f"Generating template test {idx+1}/{len(template_texts)}...")
                 wavs, sr = self.tts_engine.generate_voice_clone(
                     text=text,
                     language="Auto",
-                    voice_clone_prompt=voice_prompt
+                    voice_clone_prompt=voice_prompt,
+                    **gen_params
                 )
                 template_audios[idx] = (wavs[0], sr)
             
@@ -841,12 +845,17 @@ class VoiceCreationTab(ctk.CTkFrame):
             """Background task to create voice model."""
             logger.info("Generating sample audio with voice design...")
             
+            # Get generation parameters from config
+            gen_params = self.config.get("generation_params", {})
+            logger.debug(f"Using generation params: {gen_params}")
+            
             # Generate a sample with the description
             sample_text = "Hello, this is a voice sample created from the design description."
             wavs, sr = self.tts_engine.generate_voice_design(
                 text=sample_text,
                 language=language,
-                instruct=description
+                instruct=description,
+                **gen_params
             )
             sample_audio = wavs[0]
             
@@ -866,7 +875,8 @@ class VoiceCreationTab(ctk.CTkFrame):
                 wavs, sr = self.tts_engine.generate_voice_design(
                     text=text,
                     language=language,
-                    instruct=description
+                    instruct=description,
+                    **gen_params
                 )
                 template_audios[idx] = (wavs[0], sr)
             
@@ -940,10 +950,12 @@ class VoiceCreationTab(ctk.CTkFrame):
         
         def generate_task():
             """Background generation task."""
+            gen_params = self.config.get("generation_params", {})
             wavs, sr = self.tts_engine.generate_voice_clone(
                 text=test_text,
                 language="Auto",
-                voice_clone_prompt=self.current_voice_prompt
+                voice_clone_prompt=self.current_voice_prompt,
+                **gen_params
             )
             return wavs[0], sr
         
@@ -980,10 +992,12 @@ class VoiceCreationTab(ctk.CTkFrame):
         
         def generate_task():
             """Background generation task."""
+            gen_params = self.config.get("generation_params", {})
             wavs, sr = self.tts_engine.generate_voice_design(
                 text=test_text,
                 language=language,
-                instruct=self.current_description
+                instruct=self.current_description,
+                **gen_params
             )
             return wavs[0], sr
         

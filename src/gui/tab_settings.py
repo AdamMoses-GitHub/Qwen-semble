@@ -243,31 +243,132 @@ class SettingsTab(ctk.CTkFrame):
         title = ctk.CTkLabel(section, text="Advanced Generation Parameters", font=("Arial", 14, "bold"))
         title.pack(pady=10)
         
+        # Info text
+        info_text = ctk.CTkLabel(
+            section,
+            text="Fine-tune voice generation quality and behavior. Adjust these if audio is cut off, too robotic, or needs more variation.",
+            font=("Arial", 10),
+            text_color="gray",
+            wraplength=700
+        )
+        info_text.pack(pady=(0, 10))
+        
         # Max new tokens
         tokens_frame = ctk.CTkFrame(section)
         tokens_frame.pack(fill="x", padx=10, pady=5)
         
-        tokens_label = ctk.CTkLabel(tokens_frame, text="Max New Tokens:", width=150)
+        tokens_label = ctk.CTkLabel(tokens_frame, text="Max New Tokens:", width=150, anchor="w")
         tokens_label.pack(side="left", padx=5)
         
         self.tokens_entry = ctk.CTkEntry(tokens_frame, width=100)
         self.tokens_entry.insert(0, str(self.config.get("generation_params.max_new_tokens", 2048)))
         self.tokens_entry.pack(side="left", padx=5)
         
+        tokens_info = ctk.CTkLabel(
+            tokens_frame,
+            text="Maximum audio length (1024-4096). Increase if audio gets cut off. Higher = slower generation.",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w"
+        )
+        tokens_info.pack(side="left", padx=10, fill="x", expand=True)
+        
         # Temperature
         temp_frame = ctk.CTkFrame(section)
         temp_frame.pack(fill="x", padx=10, pady=5)
         
-        temp_label = ctk.CTkLabel(temp_frame, text="Temperature:", width=150)
+        temp_label = ctk.CTkLabel(temp_frame, text="Temperature:", width=150, anchor="w")
         temp_label.pack(side="left", padx=5)
         
-        self.temp_slider = ctk.CTkSlider(temp_frame, from_=0.0, to=1.0, number_of_steps=100, width=200)
+        self.temp_slider = ctk.CTkSlider(temp_frame, from_=0.1, to=1.5, number_of_steps=140, width=200)
         self.temp_slider.set(self.config.get("generation_params.temperature", 0.7))
         self.temp_slider.pack(side="left", padx=5)
         
         self.temp_value_label = ctk.CTkLabel(temp_frame, text=f"{self.temp_slider.get():.2f}", width=50)
         self.temp_value_label.pack(side="left", padx=5)
         self.temp_slider.configure(command=lambda v: self.temp_value_label.configure(text=f"{v:.2f}"))
+        
+        temp_info = ctk.CTkLabel(
+            temp_frame,
+            text="Voice expressiveness (0.1-1.5). Low=consistent/robotic, High=varied/creative. Default: 0.7",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w"
+        )
+        temp_info.pack(side="left", padx=10, fill="x", expand=True)
+        
+        # Top P (nucleus sampling)
+        top_p_frame = ctk.CTkFrame(section)
+        top_p_frame.pack(fill="x", padx=10, pady=5)
+        
+        top_p_label = ctk.CTkLabel(top_p_frame, text="Top P:", width=150, anchor="w")
+        top_p_label.pack(side="left", padx=5)
+        
+        self.top_p_slider = ctk.CTkSlider(top_p_frame, from_=0.5, to=1.0, number_of_steps=50, width=200)
+        self.top_p_slider.set(self.config.get("generation_params.top_p", 0.9))
+        self.top_p_slider.pack(side="left", padx=5)
+        
+        self.top_p_value_label = ctk.CTkLabel(top_p_frame, text=f"{self.top_p_slider.get():.2f}", width=50)
+        self.top_p_value_label.pack(side="left", padx=5)
+        self.top_p_slider.configure(command=lambda v: self.top_p_value_label.configure(text=f"{v:.2f}"))
+        
+        top_p_info = ctk.CTkLabel(
+            top_p_frame,
+            text="Word choice diversity (nucleus sampling). Low=predictable, High=creative. Default: 0.9",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w"
+        )
+        top_p_info.pack(side="left", padx=10, fill="x", expand=True)
+        
+        # Do sample
+        do_sample_frame = ctk.CTkFrame(section)
+        do_sample_frame.pack(fill="x", padx=10, pady=5)
+        
+        do_sample_label = ctk.CTkLabel(do_sample_frame, text="Enable Sampling:", width=150, anchor="w")
+        do_sample_label.pack(side="left", padx=5)
+        
+        self.do_sample_var = ctk.BooleanVar(value=self.config.get("generation_params.do_sample", True))
+        do_sample_check = ctk.CTkCheckBox(
+            do_sample_frame,
+            text="",
+            variable=self.do_sample_var,
+            width=30
+        )
+        do_sample_check.pack(side="left", padx=5)
+        
+        do_sample_info = ctk.CTkLabel(
+            do_sample_frame,
+            text="Enable randomness in generation. Almost always should be ON for natural speech.",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w"
+        )
+        do_sample_info.pack(side="left", padx=10, fill="x", expand=True)
+        
+        # Repetition penalty
+        rep_pen_frame = ctk.CTkFrame(section)
+        rep_pen_frame.pack(fill="x", padx=10, pady=5)
+        
+        rep_pen_label = ctk.CTkLabel(rep_pen_frame, text="Repetition Penalty:", width=150, anchor="w")
+        rep_pen_label.pack(side="left", padx=5)
+        
+        self.rep_pen_slider = ctk.CTkSlider(rep_pen_frame, from_=0.8, to=1.5, number_of_steps=70, width=200)
+        self.rep_pen_slider.set(self.config.get("generation_params.repetition_penalty", 1.0))
+        self.rep_pen_slider.pack(side="left", padx=5)
+        
+        self.rep_pen_value_label = ctk.CTkLabel(rep_pen_frame, text=f"{self.rep_pen_slider.get():.2f}", width=50)
+        self.rep_pen_value_label.pack(side="left", padx=5)
+        self.rep_pen_slider.configure(command=lambda v: self.rep_pen_value_label.configure(text=f"{v:.2f}"))
+        
+        rep_pen_info = ctk.CTkLabel(
+            rep_pen_frame,
+            text="Reduces repeated words/phrases (0.8-1.5). 1.0=no penalty, >1.0=discourage repetition. Default: 1.0",
+            font=("Arial", 9),
+            text_color="gray",
+            anchor="w"
+        )
+        rep_pen_info.pack(side="left", padx=10, fill="x", expand=True)
     
     def _create_actions_section(self, parent) -> None:
         """Create action buttons section."""
@@ -369,18 +470,41 @@ class SettingsTab(ctk.CTkFrame):
             device_str = self.device_combo.get()
             device_id = device_str.split(" - ")[0]
             
+            # Validate generation parameters
+            max_tokens = int(self.tokens_entry.get())
+            if max_tokens < 1024 or max_tokens > 4096:
+                raise ValueError("Max new tokens must be between 1024 and 4096")
+            
+            temperature = self.temp_slider.get()
+            if temperature < 0.1 or temperature > 1.5:
+                raise ValueError("Temperature must be between 0.1 and 1.5")
+            
+            top_p = self.top_p_slider.get()
+            if top_p < 0.5 or top_p > 1.0:
+                raise ValueError("Top P must be between 0.5 and 1.0")
+            
+            rep_penalty = self.rep_pen_slider.get()
+            if rep_penalty < 0.8 or rep_penalty > 1.5:
+                raise ValueError("Repetition penalty must be between 0.8 and 1.5")
+            
             # Save settings
             self.config.set("device", device_id, save=False)
             self.config.set("model_size", self.model_size_var.get(), save=False)
             self.config.set("use_flash_attention", self.flash_var.get(), save=False)
             self.config.set("output_dir", self.output_entry.get(), save=False)
-            self.config.set("generation_params.max_new_tokens", int(self.tokens_entry.get()), save=False)
-            self.config.set("generation_params.temperature", self.temp_slider.get(), save=False)
+            self.config.set("generation_params.max_new_tokens", max_tokens, save=False)
+            self.config.set("generation_params.temperature", temperature, save=False)
+            self.config.set("generation_params.top_p", top_p, save=False)
+            self.config.set("generation_params.do_sample", self.do_sample_var.get(), save=False)
+            self.config.set("generation_params.repetition_penalty", rep_penalty, save=False)
             
             self.config.save()
             
             messagebox.showinfo("Success", "Settings saved!\n\nReload models for changes to take effect.")
             
+        except ValueError as e:
+            logger.error(f"Invalid parameter value: {e}")
+            messagebox.showerror("Validation Error", str(e))
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
             messagebox.showerror("Error", f"Failed to save settings: {e}")

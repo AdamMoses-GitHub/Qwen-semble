@@ -4,7 +4,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, Union
 
 from core.audio_utils import AudioPlayer
 from utils.error_handler import logger
@@ -29,11 +29,12 @@ class SavedVoicesTab(ctk.CTkFrame):
         self.workspace_dir = workspace_dir
         self.audio_player = AudioPlayer()
         
-        self.selected_voice = None
-        self.selected_row_frame = None  # Track selected row for highlighting
+        self.selected_voice: Optional[dict] = None
+        self.selected_row_frame: Optional[List[ctk.CTkFrame]] = None  # Track selected row cells for highlighting
+        self.row_original_colors: dict = {}  # Map of cell frames to their original colors
         self.filter_type = "all"  # all, cloned, designed
         self.search_query = ""
-        self.search_tags = []
+        self.search_tags: List[str] = []
         
         self._create_ui()
         self._refresh_voice_list()
@@ -124,11 +125,13 @@ class SavedVoicesTab(ctk.CTkFrame):
         # Voice list table (scrollable)
         list_scroll = ctk.CTkScrollableFrame(list_frame)
         list_scroll.grid(row=2, column=0, sticky="nsew", padx=10, pady=10)
-        list_scroll.columnconfigure(0, weight=3)  # Name
-        list_scroll.columnconfigure(1, weight=1)  # Type
-        list_scroll.columnconfigure(2, weight=1)  # Created
-        list_scroll.columnconfigure(3, weight=1)  # Usage
-        list_scroll.columnconfigure(4, weight=2)  # Tags
+        
+        # Configure columns with minimum widths for consistent sizing
+        list_scroll.columnconfigure(0, weight=3, minsize=150)  # Name
+        list_scroll.columnconfigure(1, weight=1, minsize=80)   # Type
+        list_scroll.columnconfigure(2, weight=1, minsize=100)  # Created
+        list_scroll.columnconfigure(3, weight=1, minsize=60)   # Usage
+        list_scroll.columnconfigure(4, weight=2, minsize=120)  # Tags
         
         self.voice_list_frame = list_scroll
         
@@ -156,15 +159,27 @@ class SavedVoicesTab(ctk.CTkFrame):
         # Initial empty state
         self._show_empty_details()
     
+    def _get_theme_colors(self) -> dict:
+        """Get theme-appropriate colors based on appearance mode.
+        
+        Returns:
+            Dictionary of color names to theme-aware color tuples
+        """
+        # CustomTkinter color tuples: (light_mode_color, dark_mode_color)
+        return {
+            "header_bg": ("gray85", "gray20"),
+            "row_even": ("gray95", "gray17"),
+            "row_odd": ("white", "gray14"),
+            "row_selected": ("gray80", "gray25"),
+            "text_primary": ("gray10", "gray90"),
+            "text_secondary": ("gray40", "gray60"),
+            "type_cloned": ("#2563eb", "#60a5fa"),  # Blue
+            "type_designed": ("#c026d3", "#e879f9"),  # Purple/magenta
+        }
+    
     def _create_table_header(self) -> None:
         """Create the table header row."""
-        header_frame = ctk.CTkFrame(self.voice_list_frame, fg_color="gray25")
-        header_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=2, pady=(2, 5))
-        header_frame.columnconfigure(0, weight=3)
-        header_frame.columnconfigure(1, weight=1)
-        header_frame.columnconfigure(2, weight=1)
-        header_frame.columnconfigure(3, weight=1)
-        header_frame.columnconfigure(4, weight=2)
+        colors = self._get_theme_colors()
         
         headers = [
             ("Name", 0),
@@ -174,17 +189,22 @@ class SavedVoicesTab(ctk.CTkFrame):
             ("Tags", 4)
         ]
         
+        # Create header labels directly in parent grid
+        header_labels = []
         for text, col in headers:
             label = ctk.CTkLabel(
-                header_frame,
+                self.voice_list_frame,
                 text=text,
                 font=("Arial", 11, "bold"),
+                text_color=colors["text_primary"],
+                fg_color=colors["header_bg"],
                 anchor="w"
             )
-            label.grid(row=0, column=col, sticky="ew", padx=8, pady=5)
+            label.grid(row=0, column=col, sticky="ew", padx=(8, 8), pady=5)
+            header_labels.append(label)
         
-        # Store reference for later removal during refresh
-        self.table_header = header_frame
+        # Store references for later removal during refresh
+        self.table_header_labels = header_labels
     
     def _show_empty_details(self) -> None:
         """Show empty state in details panel."""
@@ -192,11 +212,12 @@ class SavedVoicesTab(ctk.CTkFrame):
         for widget in self.details_content_frame.winfo_children():
             widget.destroy()
         
+        colors = self._get_theme_colors()
         empty_label = ctk.CTkLabel(
             self.details_content_frame,
             text="Select a voice to view details",
             font=("Arial", 14),
-            text_color="gray"
+            text_color=colors["text_secondary"]
         )
         empty_label.pack(pady=100)
     
@@ -234,8 +255,9 @@ class SavedVoicesTab(ctk.CTkFrame):
         for widget in self.voice_list_frame.winfo_children():
             widget.destroy()
         
-        # Clear selected row reference
+        # Clear selected row reference and color mapping
         self.selected_row_frame = None
+        self.row_original_colors.clear()
         
         # Recreate table header
         self._create_table_header()
@@ -264,10 +286,11 @@ class SavedVoicesTab(ctk.CTkFrame):
         
         # Show message if no voices
         if not voices:
+            colors = self._get_theme_colors()
             no_voices_label = ctk.CTkLabel(
                 self.voice_list_frame,
                 text="No voices found" if self.search_query or self.search_tags else "No saved voices yet",
-                text_color="gray"
+                text_color=colors["text_secondary"]
             )
             no_voices_label.grid(row=1, column=0, columnspan=5, pady=20)
     
@@ -278,93 +301,111 @@ class SavedVoicesTab(ctk.CTkFrame):
             voice: Voice data dictionary
             row_num: Row number in the table
         """
-        # Create clickable row frame
-        row_frame = ctk.CTkFrame(
-            self.voice_list_frame,
-            fg_color="gray20" if row_num % 2 == 0 else "gray15",
-            cursor="hand2"
-        )
-        row_frame.grid(row=row_num, column=0, columnspan=5, sticky="ew", padx=2, pady=1)
-        row_frame.columnconfigure(0, weight=3)
-        row_frame.columnconfigure(1, weight=1)
-        row_frame.columnconfigure(2, weight=1)
-        row_frame.columnconfigure(3, weight=1)
-        row_frame.columnconfigure(4, weight=2)
+        colors = self._get_theme_colors()
+        row_bg = colors["row_even"] if row_num % 2 == 0 else colors["row_odd"]
+        
+        # Create list to track all cell frames in this row for click handling
+        row_cells = []
         
         # Name column
+        name_frame = ctk.CTkFrame(self.voice_list_frame, fg_color=row_bg, cursor="hand2")
+        name_frame.grid(row=row_num, column=0, sticky="ew", padx=(2, 1), pady=1)
         name_label = ctk.CTkLabel(
-            row_frame,
+            name_frame,
             text=voice["name"],
             font=("Arial", 11),
+            text_color=colors["text_primary"],
             anchor="w"
         )
-        name_label.grid(row=0, column=0, sticky="ew", padx=8, pady=6)
+        name_label.pack(fill="both", expand=True, padx=8, pady=6)
+        row_cells.append(name_frame)
         
         # Type column
-        type_color = "#4a90e2" if voice["type"] == "cloned" else "#e24a90"
+        type_color = colors["type_cloned"] if voice["type"] == "cloned" else colors["type_designed"]
+        type_frame = ctk.CTkFrame(self.voice_list_frame, fg_color=row_bg, cursor="hand2")
+        type_frame.grid(row=row_num, column=1, sticky="ew", padx=1, pady=1)
         type_label = ctk.CTkLabel(
-            row_frame,
+            type_frame,
             text=voice["type"].capitalize(),
             font=("Arial", 10),
             text_color=type_color,
             anchor="w"
         )
-        type_label.grid(row=0, column=1, sticky="ew", padx=8, pady=6)
+        type_label.pack(fill="both", expand=True, padx=8, pady=6)
+        row_cells.append(type_frame)
         
         # Created column
         created_date = self._format_date_short(voice.get("created", ""))
+        created_frame = ctk.CTkFrame(self.voice_list_frame, fg_color=row_bg, cursor="hand2")
+        created_frame.grid(row=row_num, column=2, sticky="ew", padx=1, pady=1)
         created_label = ctk.CTkLabel(
-            row_frame,
+            created_frame,
             text=created_date,
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
-        created_label.grid(row=0, column=2, sticky="ew", padx=8, pady=6)
+        created_label.pack(fill="both", expand=True, padx=8, pady=6)
+        row_cells.append(created_frame)
         
         # Usage column
         usage_count = voice.get("usage_count", 0)
+        usage_frame = ctk.CTkFrame(self.voice_list_frame, fg_color=row_bg, cursor="hand2")
+        usage_frame.grid(row=row_num, column=3, sticky="ew", padx=1, pady=1)
         usage_label = ctk.CTkLabel(
-            row_frame,
+            usage_frame,
             text=str(usage_count),
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
-        usage_label.grid(row=0, column=3, sticky="ew", padx=8, pady=6)
+        usage_label.pack(fill="both", expand=True, padx=8, pady=6)
+        row_cells.append(usage_frame)
         
         # Tags column
         tags_text = ", ".join(voice.get("tags", [])[:3])  # Show first 3 tags
         if len(voice.get("tags", [])) > 3:
             tags_text += "..."
+        tags_frame = ctk.CTkFrame(self.voice_list_frame, fg_color=row_bg, cursor="hand2")
+        tags_frame.grid(row=row_num, column=4, sticky="ew", padx=(1, 2), pady=1)
         tags_label = ctk.CTkLabel(
-            row_frame,
+            tags_frame,
             text=tags_text if tags_text else "-",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
-        tags_label.grid(row=0, column=4, sticky="ew", padx=8, pady=6)
+        tags_label.pack(fill="both", expand=True, padx=8, pady=6)
+        row_cells.append(tags_frame)
+        
+        # Store original color and cell references for restoration
+        for cell in row_cells:
+            self.row_original_colors[cell] = row_bg
         
         # Click handler
         def select_voice(e=None):
             # Unhighlight previous selection
-            if self.selected_row_frame:
-                # Restore original color based on row number
-                orig_color = "gray20" if row_num % 2 == 0 else "gray15"
-                self.selected_row_frame.configure(fg_color=orig_color)
+            if self.selected_row_frame is not None:
+                for cell in self.selected_row_frame:
+                    if cell in self.row_original_colors:
+                        cell.configure(fg_color=self.row_original_colors[cell])
             
             # Highlight this row
-            row_frame.configure(fg_color="gray30")
-            self.selected_row_frame = row_frame
+            for cell in row_cells:
+                cell.configure(fg_color=colors["row_selected"])
+            
+            # Store reference to this row's cells
+            self.selected_row_frame = row_cells
             
             # Show voice details
             self._select_voice(voice)
         
-        # Bind click events
-        row_frame.bind("<Button-1>", select_voice)
-        for widget in [name_label, type_label, created_label, usage_label, tags_label]:
-            widget.bind("<Button-1>", select_voice)
+        # Bind click events to all cells and labels
+        for cell in row_cells:
+            cell.bind("<Button-1>", select_voice)
+            # Also bind to the label inside
+            for widget in cell.winfo_children():
+                widget.bind("<Button-1>", select_voice)
     
     def _format_date_short(self, iso_date: str) -> str:
         """Format ISO date string to short format.

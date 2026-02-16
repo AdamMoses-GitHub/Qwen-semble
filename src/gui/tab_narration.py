@@ -339,6 +339,10 @@ class NarrationTab(ctk.CTkFrame):
             total = len(self.segments)
             logger.info(f"Starting background generation task for {total} segments")
             
+            # Get generation parameters from config
+            gen_params = self.config.get("generation_params", {})
+            logger.debug(f"Using generation params: {gen_params}")
+            
             for i, segment in enumerate(self.segments):
                 # Check for cancellation
                 if self.worker and self.worker.stop_flag.is_set():
@@ -361,7 +365,8 @@ class NarrationTab(ctk.CTkFrame):
                     wavs, sr = self.tts_engine.generate_custom_voice(
                         text=text,
                         language="Auto",
-                        speaker=voice
+                        speaker=voice,
+                        **gen_params
                     )
                 else:
                     # Library voice - need to load voice clone prompt or handle designed voice
@@ -386,7 +391,8 @@ class NarrationTab(ctk.CTkFrame):
                                 wavs, sr = self.tts_engine.generate_voice_clone(
                                     text=text,
                                     language=voice_data.get("language", "Auto"),
-                                    voice_clone_prompt=voice_prompt
+                                    voice_clone_prompt=voice_prompt,
+                                    **gen_params
                                 )
                                 logger.debug(f"Cloned voice generation successful")
                                 
@@ -410,7 +416,8 @@ class NarrationTab(ctk.CTkFrame):
                                 wavs, sr = self.tts_engine.generate_voice_design(
                                     text=text,
                                     language=voice_data.get("language", "Auto"),
-                                    instruct=voice_data.get("description", "")
+                                    instruct=voice_data.get("description", ""),
+                                    **gen_params
                                 )
                                 logger.debug(f"Designed voice generation successful")
                                 
@@ -427,7 +434,8 @@ class NarrationTab(ctk.CTkFrame):
                         wavs, sr = self.tts_engine.generate_custom_voice(
                             text=text,
                             language="Auto",
-                            speaker=self.tts_engine.get_supported_speakers()[0]
+                            speaker=self.tts_engine.get_supported_speakers()[0],
+                            **gen_params
                         )
                 
                 logger.debug(f"Segment {i+1} generated successfully")
