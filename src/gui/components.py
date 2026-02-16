@@ -7,6 +7,7 @@ from pathlib import Path
 
 from core.audio_utils import AudioPlayer
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 
 
 class AudioPlayerWidget(ctk.CTkFrame):
@@ -354,6 +355,8 @@ class SegmentListRow(ctk.CTkFrame):
         parent,
         segment_id: int,
         text_preview: str,
+        total_segments: int,
+        segment_color: str,
         on_voice_select: Optional[Callable] = None,
         **kwargs
     ):
@@ -363,57 +366,65 @@ class SegmentListRow(ctk.CTkFrame):
             parent: Parent widget
             segment_id: Segment ID
             text_preview: Preview of segment text
+            total_segments: Total number of segments
+            segment_color: Color for segment number display
             on_voice_select: Callback(segment_id) when select button clicked
             **kwargs: Additional frame arguments
         """
-        super().__init__(parent, **kwargs)
+        super().__init__(parent, border_width=1, **kwargs)
         
         self.segment_id = segment_id
         self.on_voice_select = on_voice_select
         self.selected_voice_data = None
         
-        # Configure grid
-        self.columnconfigure(0, weight=0)  # Segment number
-        self.columnconfigure(1, weight=1)  # Text preview
-        self.columnconfigure(2, weight=0)  # Voice label
-        self.columnconfigure(3, weight=0)  # Select button
+        # Get theme colors
+        colors = get_theme_colors()
         
-        # Segment number
+        # Configure 2x2 grid
+        self.columnconfigure(0, weight=1)  # Left column
+        self.columnconfigure(1, weight=1)  # Right column
+        self.rowconfigure(0, weight=0)     # Top row
+        self.rowconfigure(1, weight=0)     # Bottom row
+        
+        # Upper left: Segment number as "X of Y" in colored text
+        segment_text = f"({segment_id + 1} of {total_segments})"
         self.id_label = ctk.CTkLabel(
             self,
-            text=f"{segment_id + 1}.",
-            width=40,
-            font=("Arial", 11, "bold")
+            text=segment_text,
+            font=("Arial", 12, "bold"),
+            text_color=segment_color,
+            anchor="w"
         )
-        self.id_label.grid(row=0, column=0, sticky="w", padx=(5, 2))
+        self.id_label.grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
         
-        # Text preview
+        # Upper right: Text preview (first 30 chars, trailing "...")
+        display_text = text_preview[:30] + "..." if len(text_preview) > 30 else text_preview
         self.text_label = ctk.CTkLabel(
             self,
-            text=text_preview,
+            text=display_text,
             anchor="w",
             font=("Arial", 11)
         )
-        self.text_label.grid(row=0, column=1, sticky="w", padx=5)
+        self.text_label.grid(row=0, column=1, sticky="w", padx=10, pady=(8, 4))
         
-        # Assigned voice label
+        # Lower left: Assigned voice or "Not assigned"
         self.voice_label = ctk.CTkLabel(
             self,
             text="Not assigned",
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w",
-            width=150
+            font=("Arial", 11)
         )
-        self.voice_label.grid(row=0, column=2, sticky="w", padx=5)
+        self.voice_label.grid(row=1, column=0, sticky="w", padx=10, pady=(4, 8))
         
-        # Select voice button
+        # Lower right: Select voice button
         self.select_button = ctk.CTkButton(
             self,
             text="Select Voice",
             width=120,
             command=self._on_button_clicked
         )
-        self.select_button.grid(row=0, column=3, sticky="e", padx=5)
+        self.select_button.grid(row=1, column=1, sticky="e", padx=10, pady=(4, 8))
     
     def _on_button_clicked(self) -> None:
         """Handle select button click."""
@@ -427,10 +438,11 @@ class SegmentListRow(ctk.CTkFrame):
             voice_data: Voice data dictionary with 'name' and 'type'
         """
         self.selected_voice_data = voice_data
+        colors = get_theme_colors()
         voice_name = voice_data['name']
         voice_type = voice_data.get('type', 'preset')
-        display_text = f"{voice_name} ({voice_type})"
-        self.voice_label.configure(text=display_text, text_color="white")
+        display_text = f"Assigned: {voice_name} ({voice_type})"
+        self.voice_label.configure(text=display_text, text_color=colors["text_primary"])
     
     def get_selected_voice(self) -> Optional[dict]:
         """Get currently selected voice data.

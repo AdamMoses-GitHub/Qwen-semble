@@ -3,6 +3,7 @@
 import customtkinter as ctk
 from typing import Dict, Callable, List, Optional
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 from gui.voice_browser import VoiceBrowserWidget
 
 
@@ -88,29 +89,11 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
         )
         info.grid(row=1, column=0, pady=(0, 10), sticky="w", padx=10)
         
-        # Table header
-        header_frame = ctk.CTkFrame(self, fg_color="transparent")
-        header_frame.grid(row=2, column=0, sticky="ew", padx=10, pady=(0, 5))
-        header_frame.columnconfigure(0, weight=1)
-        header_frame.columnconfigure(1, weight=1)
-        header_frame.columnconfigure(2, weight=1)
-        header_frame.columnconfigure(3, weight=0)
-        
-        headers = ["Speaker", "Segments", "Assigned Voice", ""]
-        for col, header_text in enumerate(headers):
-            header_label = ctk.CTkLabel(
-                header_frame,
-                text=header_text,
-                font=("Arial", 12, "bold"),
-                anchor="w"
-            )
-            header_label.grid(row=0, column=col, padx=5, sticky="w")
-        
-        # Scrollable frame for speaker rows
+        # Scrollable frame for speaker rows (no headers)
         self.rows_frame = ctk.CTkScrollableFrame(self, height=300)
-        self.rows_frame.grid(row=3, column=0, sticky="nsew", padx=10, pady=5)
+        self.rows_frame.grid(row=2, column=0, sticky="nsew", padx=10, pady=5)
         self.rows_frame.columnconfigure(0, weight=1)
-        self.rowconfigure(3, weight=1)
+        self.rowconfigure(2, weight=1)
         
         # Create rows for each speaker
         self.speaker_rows = {}
@@ -125,65 +108,71 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
             text_color="orange",
             font=("Arial", 11)
         )
-        self.validation_label.grid(row=4, column=0, pady=(5, 10), padx=10)
+        self.validation_label.grid(row=3, column=0, pady=(5, 10), padx=10)
         
         self._update_validation_status()
     
     def _create_speaker_row(self, speaker: str, row_index: int) -> Dict:
-        """Create a row for a single speaker."""
-        row_frame = ctk.CTkFrame(self.rows_frame)
-        row_frame.grid(row=row_index, column=0, sticky="ew", pady=2)
-        row_frame.columnconfigure(0, weight=1)
-        row_frame.columnconfigure(1, weight=1)
-        row_frame.columnconfigure(2, weight=1)
-        row_frame.columnconfigure(3, weight=0)
+        """Create a 2x2 grid for a single speaker."""
+        # Main container frame for this speaker
+        row_frame = ctk.CTkFrame(self.rows_frame, border_width=1)
+        row_frame.grid(row=row_index, column=0, sticky="ew", pady=5, padx=5)
         
-        # Speaker color indicator
+        # Configure 2x2 grid
+        row_frame.columnconfigure(0, weight=1)  # Left column
+        row_frame.columnconfigure(1, weight=1)  # Right column
+        row_frame.rowconfigure(0, weight=0)     # Top row
+        row_frame.rowconfigure(1, weight=0)     # Bottom row
+        
+        # Get speaker color and theme colors
         color = self.speaker_colors[speaker]
-        color_badge = ctk.CTkFrame(row_frame, width=5, height=30, fg_color=color)
-        color_badge.grid(row=0, column=0, sticky="w", padx=(5, 2))
-        color_badge.grid_propagate(False)
+        colors = get_theme_colors()
         
-        # Speaker name
+        # Upper left: Speaker name/number with colored text and position indicator
+        speaker_number = row_index + 1
+        total_speakers = len(self.speakers)
+        speaker_text = f"({speaker_number} of {total_speakers}) {speaker}"
         speaker_label = ctk.CTkLabel(
             row_frame,
-            text=speaker,
-            font=("Arial", 12, "bold"),
+            text=speaker_text,
+            font=("Arial", 13, "bold"),
+            text_color=color,
             anchor="w"
         )
-        speaker_label.grid(row=0, column=0, sticky="w", padx=(15, 5))
+        speaker_label.grid(row=0, column=0, sticky="w", padx=10, pady=(8, 4))
         
-        # Segment count
+        # Upper right: Segment count
         count = self.segment_counts.get(speaker, 0)
         count_label = ctk.CTkLabel(
             row_frame,
             text=f"{count} segments",
-            text_color="gray",
-            anchor="w"
+            font=("Arial", 11),
+            text_color=colors["text_secondary"],
+            anchor="e"
         )
-        count_label.grid(row=0, column=1, sticky="w", padx=5)
+        count_label.grid(row=0, column=1, sticky="e", padx=10, pady=(8, 4))
         
-        # Assigned voice label
+        # Lower left: Assigned voice or "Not assigned"
         voice_label = ctk.CTkLabel(
             row_frame,
             text="Not assigned",
-            text_color="gray",
+            font=("Arial", 11),
+            text_color=colors["text_secondary"],
             anchor="w"
         )
-        voice_label.grid(row=0, column=2, sticky="w", padx=5)
+        voice_label.grid(row=1, column=0, sticky="w", padx=10, pady=(4, 8))
         
-        # Browse button
+        # Lower right: Select Voice button
         browse_button = ctk.CTkButton(
             row_frame,
             text="Select Voice",
             width=120,
             command=lambda s=speaker: self._browse_voice_for_speaker(s)
         )
-        browse_button.grid(row=0, column=3, sticky="e", padx=5)
+        browse_button.grid(row=1, column=1, sticky="e", padx=10, pady=(4, 8))
         
         return {
             'frame': row_frame,
-            'color_badge': color_badge,
             'speaker_label': speaker_label,
             'count_label': count_label,
             'voice_label': voice_label,
@@ -209,6 +198,7 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
     def _on_voice_assigned(self, speaker: str, voice_data: dict) -> None:
         """Handle voice assignment to a speaker."""
         self.speaker_assignments[speaker] = voice_data
+        colors = get_theme_colors()
         
         # Update the UI
         voice_name = voice_data['name']
@@ -216,7 +206,7 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
         display_text = f"{voice_name} ({voice_type})"
         
         row = self.speaker_rows[speaker]
-        row['voice_label'].configure(text=display_text, text_color="white")
+        row['voice_label'].configure(text=display_text, text_color=colors["text_primary"])
         
         # Update validation status
         self._update_validation_status()
@@ -229,24 +219,25 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
     
     def _update_validation_status(self) -> None:
         """Update validation status message."""
+        colors = get_theme_colors()
         assigned_count = len(self.speaker_assignments)
         total_count = len(self.speakers)
         
         if assigned_count == 0:
             self.validation_label.configure(
                 text="⚠️ No voices assigned yet",
-                text_color="orange"
+                text_color=colors["warning_text"]
             )
         elif assigned_count < total_count:
             remaining = total_count - assigned_count
             self.validation_label.configure(
                 text=f"⚠️ {remaining} speaker(s) still need voice assignment",
-                text_color="orange"
+                text_color=colors["warning_text"]
             )
         else:
             self.validation_label.configure(
                 text="✅ All speakers have voices assigned",
-                text_color="green"
+                text_color=colors["success_text"]
             )
     
     def get_assignments(self) -> Dict[str, dict]:
@@ -279,9 +270,10 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
     def clear_assignments(self) -> None:
         """Clear all voice assignments."""
         self.speaker_assignments.clear()
+        colors = get_theme_colors()
         
         for speaker, row in self.speaker_rows.items():
-            row['voice_label'].configure(text="Not assigned", text_color="gray")
+            row['voice_label'].configure(text="Not assigned", text_color=colors["text_secondary"])
         
         self._update_validation_status()
         logger.info("Cleared all speaker voice assignments")

@@ -9,6 +9,7 @@ from core.transcript_parser import TranscriptParser
 from core.audio_utils import save_audio, merge_audio_segments
 from utils.error_handler import logger, show_error_dialog
 from utils.threading_helpers import CancellableWorker
+from utils.theme import get_theme_colors
 from gui.components import AudioPlayerWidget, SegmentListRow
 from gui.voice_browser import VoiceBrowserWidget
 from gui.speaker_assignment import SpeakerAssignmentPanel
@@ -136,9 +137,9 @@ class NarrationTab(ctk.CTkFrame):
         # Parse text area button
         parse_btn = ctk.CTkButton(
             button_container,
-            text="Parse Text Area",
+            text="Parse And Check Text For Segments Or Speakers",
             command=self._parse_text_area,
-            width=150
+            width=300
         )
         parse_btn.pack(side="left", padx=5)
         
@@ -195,9 +196,9 @@ class NarrationTab(ctk.CTkFrame):
         self.assignment_content_frame = ctk.CTkFrame(self.assignment_panel)
         self.assignment_content_frame.pack(fill="both", expand=True, padx=10, pady=5)
         
-        # Configure 2-column grid layout
-        self.assignment_content_frame.columnconfigure(0, weight=1)  # Left: assignments
-        self.assignment_content_frame.columnconfigure(1, weight=1)  # Right: explanations
+        # Configure 2-column grid layout (75% assignment, 25% explainer)
+        self.assignment_content_frame.columnconfigure(0, weight=3)  # Left: assignments (75%)
+        self.assignment_content_frame.columnconfigure(1, weight=1)  # Right: explanations (25%)
         self.assignment_content_frame.rowconfigure(0, weight=1)
         
         # Left frame for assignment UI
@@ -223,11 +224,12 @@ class NarrationTab(ctk.CTkFrame):
         )
         self.mode_explanation_label.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Info label
+        # Parse Status label (larger, bold font)
         self.assignment_info_label = ctk.CTkLabel(
             self.assignment_panel,
             text="Select a voice assignment mode to begin",
-            text_color="gray"
+            text_color="gray",
+            font=("Arial", 14, "bold")
         )
         self.assignment_info_label.pack(pady=10)
         
@@ -282,8 +284,8 @@ class NarrationTab(ctk.CTkFrame):
             self.stats_label.configure(text=stats_text)
             logger.info(f"Text area statistics: {stats_text}")
             
-            # Parse the transcript with user feedback
-            self._parse_transcript(show_messages=True)
+            # Parse the transcript without popup confirmation
+            self._parse_transcript(show_messages=False)
             
         except Exception as e:
             show_error_dialog(e, "parsing text area", self)
@@ -419,7 +421,8 @@ class NarrationTab(ctk.CTkFrame):
                 self._show_annotated_assignment(detected_speakers, segment_counts)
             
             logger.info(f"Successfully parsed {len(self.segments)} segments")
-            self.generate_button.configure(state="normal")
+            # Generate button will be enabled/disabled by _update_parse_status based on assignments
+            self._update_parse_status()
             if show_messages:
                 messagebox.showinfo("Success", f"Parsed {len(self.segments)} segments")
             
@@ -452,20 +455,36 @@ class NarrationTab(ctk.CTkFrame):
                 font=("Arial", 12)
             )
             empty_label.pack(pady=40)
-            self.assignment_info_label.configure(text="No segments to assign")
+            self._update_parse_status()
             return
+        
+        # Generate distinct colors for segments
+        segment_colors = [
+            "#3b82f6",  # blue
+            "#ec4899",  # pink
+            "#10b981",  # green
+            "#f59e0b",  # amber
+            "#8b5cf6",  # violet
+            "#ef4444",  # red
+            "#14b8a6",  # teal
+            "#f97316",  # orange
+        ]
         
         # Show first 50 segments (performance)
         max_show = min(50, len(self.segments))
+        total_segments = len(self.segments)
         for i, segment in enumerate(self.segments[:max_show]):
-            preview = self.parser.preview_segment(segment, max_length=60)
+            preview = self.parser.preview_segment(segment, max_length=80)
+            segment_color = segment_colors[i % len(segment_colors)]
             row = SegmentListRow(
                 self.segments_frame,
                 segment.segment_id,
                 preview,
+                total_segments,
+                segment_color,
                 on_voice_select=self._browse_voice_for_segment
             )
-            row.pack(fill="x", pady=2)
+            row.pack(fill="x", pady=5, padx=5)
             self.segment_rows[segment.segment_id] = row
         
         if len(self.segments) > max_show:
@@ -476,7 +495,7 @@ class NarrationTab(ctk.CTkFrame):
             )
             more_label.pack(pady=10)
         
-        self.assignment_info_label.configure(text=f"Assign voices to {len(self.segments)} segments")
+        self._update_parse_status()
     
     def _show_single_voice_assignment(self) -> None:
         """Show single voice assignment UI."""
@@ -518,10 +537,12 @@ class NarrationTab(ctk.CTkFrame):
             voice_name = self.selected_voice_data['name']
             voice_type = self.selected_voice_data.get('type', 'preset')
             display_text = f"{voice_name} ({voice_type})"
-            text_color = "white"
+            colors = get_theme_colors()
+            text_color = colors["text_primary"]
         else:
             display_text = "No voice selected"
-            text_color = "gray"
+            colors = get_theme_colors()
+            text_color = colors["text_secondary"]
         
         voice_display = ctk.CTkLabel(
             row_frame,
@@ -540,13 +561,8 @@ class NarrationTab(ctk.CTkFrame):
         )
         select_btn.grid(row=0, column=2, sticky="e", padx=5)
         
-        # Info
-        segment_count = len(self.segments)
-        if segment_count == 0:
-            info_text = "No transcript loaded. Select a voice for when you add text."
-        else:
-            info_text = f"Using single voice for {segment_count} segment{'s' if segment_count != 1 else ''}"
-        self.assignment_info_label.configure(text=info_text)
+        # Update Parse Status
+        self._update_parse_status()
     
     def _update_mode_ui(self, mode: str) -> None:
         """Update voice assignment UI for current mode (with or without parsed text).
@@ -666,7 +682,7 @@ class NarrationTab(ctk.CTkFrame):
         )
         empty_label.pack(pady=40)
         
-        self.assignment_info_label.configure(text="No speakers detected")
+        self._update_parse_status()
     
     def _show_annotated_assignment(self, speakers: list, segment_counts: dict) -> None:
         """Show annotated mode speaker assignment UI."""
@@ -689,9 +705,7 @@ class NarrationTab(ctk.CTkFrame):
         )
         self.speaker_assignment_panel.pack(fill="both", expand=True)
         
-        self.assignment_info_label.configure(
-            text=f"Assign voices to {len(speakers)} detected speakers"
-        )
+        self._update_parse_status()
         
         logger.info(f"Created speaker assignment panel with {len(speakers)} speakers")
     
@@ -730,12 +744,89 @@ class NarrationTab(ctk.CTkFrame):
             self.segment_rows[segment_id].set_voice(voice_data)
         
         logger.info(f"Assigned voice '{voice_data['name']}' to segment {segment_id}")
+        self._update_parse_status()
     
     def _on_speaker_assignment_change(self, speaker: str, voice_data: dict) -> None:
         """Handle speaker-to-voice assignment changes."""
         logger.debug(f"Speaker '{speaker}' assigned to voice '{voice_data['name']}'")
         # The assignment is stored in the speaker_assignment_panel
         # We'll use it during generation
+        self._update_parse_status()
+    
+    def _update_parse_status(self) -> None:
+        """Update the Parse Status label based on current transcript and assignment state."""
+        # Check if transcript is empty or whitespace
+        text = self.transcript_textbox.get("1.0", "end-1c").strip()
+        colors = get_theme_colors()
+        
+        if not text:
+            # Empty transcript
+            self.assignment_info_label.configure(
+                text="Transcript Is Empty",
+                text_color=colors["text_secondary"]
+            )
+            self.generate_button.configure(state="disabled")
+            return
+        
+        # Transcript has content - check mode
+        mode = self.mode_var.get()
+        
+        if mode == "single":
+            # Single voice mode - always green success message and enable generate
+            self.assignment_info_label.configure(
+                text="Single Voice Applied To All Text",
+                text_color=colors["success_text"]
+            )
+            self.generate_button.configure(state="normal")
+        
+        elif mode == "manual":
+            # Manual/segment mode - check assignment completion
+            total_segments = len(self.segments)
+            assigned_segments = len(self.voice_mapping)
+            
+            if assigned_segments < total_segments:
+                # Not all assigned
+                self.assignment_info_label.configure(
+                    text=f"{total_segments} Segments Detected - Must Assign All Segments Voices",
+                    text_color=colors["error_text"]
+                )
+                self.generate_button.configure(state="disabled")
+            else:
+                # All assigned
+                self.assignment_info_label.configure(
+                    text=f"{total_segments} Segments Detected - All Segments Assigned Voices",
+                    text_color=colors["success_text"]
+                )
+                self.generate_button.configure(state="normal")
+        
+        elif mode == "annotated":
+            # Annotated speaker mode
+            if not self.speaker_assignment_panel:
+                # No speaker panel = no speakers detected
+                self.assignment_info_label.configure(
+                    text="No Speaker Detected",
+                    text_color=colors["error_text"]
+                )
+                self.generate_button.configure(state="disabled")
+            else:
+                # Have speaker panel - check completion
+                speakers = self.speaker_assignment_panel.speakers
+                total_speakers = len(speakers)
+                
+                if not self.speaker_assignment_panel.is_complete():
+                    # Not all speakers assigned
+                    self.assignment_info_label.configure(
+                        text=f"{total_speakers} Speakers Detected - Must Assign All Speakers Voices",
+                        text_color=colors["error_text"]
+                    )
+                    self.generate_button.configure(state="disabled")
+                else:
+                    # All speakers assigned
+                    self.assignment_info_label.configure(
+                        text=f"{total_speakers} Speakers Detected - All Speakers Assigned Voices",
+                        text_color=colors["success_text"]
+                    )
+                    self.generate_button.configure(state="normal")
     
     def _generate_narration(self) -> None:
         """Generate narration from segments."""
@@ -1019,6 +1110,7 @@ class NarrationTab(ctk.CTkFrame):
     
     def _reset_generate_ui(self) -> None:
         """Reset generation UI."""
-        self.generate_button.configure(state="normal")
+        # Re-check assignments to determine if generate button should be enabled
+        self._update_parse_status()
         self.cancel_button.configure(state="disabled")
         self.worker = None

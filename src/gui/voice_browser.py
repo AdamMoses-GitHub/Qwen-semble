@@ -7,6 +7,7 @@ from pathlib import Path
 
 from core.audio_utils import AudioPlayer, load_audio
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 
 
 class VoiceCard(ctk.CTkFrame):
@@ -69,12 +70,13 @@ class VoiceCard(ctk.CTkFrame):
             "preset": ("#16a34a", "#4ade80")
         }
         type_color = type_colors.get(voice_type, type_colors["preset"])
+        colors = get_theme_colors()
         
         type_badge = ctk.CTkLabel(
             header_frame,
             text=voice_type.capitalize(),
             font=("Arial", 9, "bold"),
-            text_color="white",
+            text_color=colors["badge_text"],
             fg_color=type_color,
             corner_radius=4,
             padx=8,

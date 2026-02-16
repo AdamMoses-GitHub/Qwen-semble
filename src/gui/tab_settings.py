@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox
 from pathlib import Path
 
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 
 
 class SettingsTab(ctk.CTkFrame):
@@ -422,21 +423,23 @@ class SettingsTab(ctk.CTkFrame):
     
     def _validate_token(self) -> None:
         """Validate HuggingFace token."""
+        colors = get_theme_colors()
         token = self.token_entry.get().strip()
         if not token:
-            self.token_status_label.configure(text="❌ No token provided", text_color="red")
+            self.token_status_label.configure(text="❌ No token provided", text_color=colors["error_text"])
             return
         
         try:
             from huggingface_hub import whoami
             user_info = whoami(token=token)
             username = user_info.get("name", "Unknown")
-            self.token_status_label.configure(text=f"✓ Valid token for user: {username}", text_color="green")
+            self.token_status_label.configure(text=f"✓ Valid token for user: {username}", text_color=colors["success_text"])
         except Exception as e:
-            self.token_status_label.configure(text=f"❌ Invalid token: {str(e)}", text_color="red")
+            self.token_status_label.configure(text=f"❌ Invalid token: {str(e)}", text_color=colors["error_text"])
     
     def _save_token(self) -> None:
         """Save HuggingFace token."""
+        colors = get_theme_colors()
         token = self.token_entry.get().strip()
         if not token:
             messagebox.showerror("Error", "No token to save")
@@ -446,19 +449,20 @@ class SettingsTab(ctk.CTkFrame):
             from huggingface_hub import login
             login(token=token)
             messagebox.showinfo("Success", "Token saved successfully")
-            self.token_status_label.configure(text="✓ Token saved", text_color="green")
+            self.token_status_label.configure(text="✓ Token saved", text_color=colors["success_text"])
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save token: {e}")
     
     def _clear_token(self) -> None:
         """Clear HuggingFace token."""
+        colors = get_theme_colors()
         response = messagebox.askyesno("Confirm", "Clear saved HuggingFace token?")
         if response:
             try:
                 from huggingface_hub import logout
                 logout()
                 self.token_entry.delete(0, "end")
-                self.token_status_label.configure(text="Token cleared", text_color="gray")
+                self.token_status_label.configure(text="Token cleared", text_color=colors["text_secondary"])
                 messagebox.showinfo("Success", "Token cleared")
             except Exception as e:
                 messagebox.showerror("Error", f"Failed to clear token: {e}")

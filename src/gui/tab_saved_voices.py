@@ -8,6 +8,7 @@ from typing import Optional, List, Union
 
 from core.audio_utils import AudioPlayer
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 
 
 class SavedVoicesTab(ctk.CTkFrame):
@@ -159,27 +160,9 @@ class SavedVoicesTab(ctk.CTkFrame):
         # Initial empty state
         self._show_empty_details()
     
-    def _get_theme_colors(self) -> dict:
-        """Get theme-appropriate colors based on appearance mode.
-        
-        Returns:
-            Dictionary of color names to theme-aware color tuples
-        """
-        # CustomTkinter color tuples: (light_mode_color, dark_mode_color)
-        return {
-            "header_bg": ("gray85", "gray20"),
-            "row_even": ("gray95", "gray17"),
-            "row_odd": ("white", "gray14"),
-            "row_selected": ("gray80", "gray25"),
-            "text_primary": ("gray10", "gray90"),
-            "text_secondary": ("gray40", "gray60"),
-            "type_cloned": ("#2563eb", "#60a5fa"),  # Blue
-            "type_designed": ("#c026d3", "#e879f9"),  # Purple/magenta
-        }
-    
     def _create_table_header(self) -> None:
         """Create the table header row."""
-        colors = self._get_theme_colors()
+        colors = get_theme_colors()
         
         headers = [
             ("Name", 0),
@@ -212,7 +195,7 @@ class SavedVoicesTab(ctk.CTkFrame):
         for widget in self.details_content_frame.winfo_children():
             widget.destroy()
         
-        colors = self._get_theme_colors()
+        colors = get_theme_colors()
         empty_label = ctk.CTkLabel(
             self.details_content_frame,
             text="Select a voice to view details",
@@ -286,7 +269,7 @@ class SavedVoicesTab(ctk.CTkFrame):
         
         # Show message if no voices
         if not voices:
-            colors = self._get_theme_colors()
+            colors = get_theme_colors()
             no_voices_label = ctk.CTkLabel(
                 self.voice_list_frame,
                 text="No voices found" if self.search_query or self.search_tags else "No saved voices yet",
@@ -301,7 +284,7 @@ class SavedVoicesTab(ctk.CTkFrame):
             voice: Voice data dictionary
             row_num: Row number in the table
         """
-        colors = self._get_theme_colors()
+        colors = get_theme_colors()
         row_bg = colors["row_even"] if row_num % 2 == 0 else colors["row_odd"]
         
         # Create list to track all cell frames in this row for click handling
