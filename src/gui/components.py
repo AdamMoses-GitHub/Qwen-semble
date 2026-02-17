@@ -440,7 +440,7 @@ class SegmentListRow(ctk.CTkFrame):
         self.selected_voice_data = voice_data
         colors = get_theme_colors()
         voice_name = voice_data['name']
-        voice_type = voice_data.get('type', 'preset')
+        voice_type = voice_data.get('type', 'cloned')
         display_text = f"Assigned: {voice_name} ({voice_type})"
         self.voice_label.configure(text=display_text, text_color=colors["text_primary"])
     

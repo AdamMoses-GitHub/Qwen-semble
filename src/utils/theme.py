@@ -37,7 +37,6 @@ def get_theme_colors() -> dict:
         "badge_text": ("white", "white"),          # Text on colored badges (white works on all dark badge backgrounds)
         "type_cloned": ("#2563eb", "#60a5fa"),     # Blue for cloned voices
         "type_designed": ("#c026d3", "#e879f9"),   # Purple/magenta for designed voices
-        "type_preset": ("#059669", "#34d399"),     # Green for preset voices
         
         # UI element colors
         "button_success": ("#16a34a", "#22c55e"),  # Green buttons

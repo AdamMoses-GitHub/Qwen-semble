@@ -358,7 +358,7 @@ class NarrationTab(ctk.CTkFrame):
         """Handle voice selection for single voice mode."""
         self.selected_voice_data = voice_data
         voice_name = voice_data['name']
-        voice_type = voice_data.get('type', 'preset')
+        voice_type = voice_data.get('type', 'cloned')
         
         logger.info(f"Selected voice for single voice mode: {voice_name} ({voice_type})")
         
@@ -373,18 +373,17 @@ class NarrationTab(ctk.CTkFrame):
         # But we should reset selection if the selected voice was deleted
         if self.selected_voice_data:
             voice_name = self.selected_voice_data['name']
-            voice_type = self.selected_voice_data.get('type', 'preset')
+            voice_type = self.selected_voice_data.get('type', 'cloned')
             
-            if voice_type != 'preset':
-                # Check if voice still exists in library
-                lib_voices = self.voice_library.get_all_voices()
-                if not any(v['name'] == voice_name for v in lib_voices):
-                    logger.warning(f"Previously selected voice '{voice_name}' no longer exists")
-                    self.selected_voice_data = None
-                    # Re-parse to update UI if there's text
-                    text = self.transcript_textbox.get("1.0", "end-1c").strip()
-                    if text:
-                        self._parse_transcript(show_messages=False)
+            # Check if voice still exists in library
+            lib_voices = self.voice_library.get_all_voices()
+            if not any(v['name'] == voice_name for v in lib_voices):
+                logger.warning(f"Previously selected voice '{voice_name}' no longer exists")
+                self.selected_voice_data = None
+                # Re-parse to update UI if there's text
+                text = self.transcript_textbox.get("1.0", "end-1c").strip()
+                if text:
+                    self._parse_transcript(show_messages=False)
     
     def _update_voice_list(self) -> None:
         """Update available voices list (deprecated - using browser now)."""
@@ -413,21 +412,26 @@ class NarrationTab(ctk.CTkFrame):
         try:
             # Parse based on mode
             if mode == "single":
-                # Use selected voice or default to first preset
+                # Use selected voice or default to first available voice
                 if not self.selected_voice_data:
-                    # Default to first preset voice if none selected
-                    presets = self.voice_library.get_all_voices("preset")
-                    if presets:
-                        self.selected_voice_data = presets[0]
-                        default_voice = presets[0]['name']
+                    # Try to get first available voice from library
+                    all_voices = self.voice_library.get_all_voices()
+                    if all_voices:
+                        self.selected_voice_data = all_voices[0]
+                        default_voice = all_voices[0]['name']
+                        logger.info(f"No voice selected, using first available: {default_voice}")
                     else:
-                        # Fallback to engine presets
-                        default_voice = self.tts_engine.get_supported_speakers()[0]
-                        self.selected_voice_data = {
-                            'name': default_voice,
-                            'type': 'preset',
-                            'preset_name': default_voice
-                        }
+                        # No voices in library - user must create one first
+                        if show_messages:
+                            messagebox.showerror(
+                                "No Voices Available", 
+                                "No voices found in library.\n\n"
+                                "Please create a voice first:\n"
+                                "• Go to 'Voice Cloning' tab to clone a voice, or\n"
+                                "• Go to 'Voice Design' tab to design a voice"
+                            )
+                        logger.error("No voices available in library")
+                        return
                 else:
                     default_voice = self.selected_voice_data['name']
                 
@@ -571,7 +575,7 @@ class NarrationTab(ctk.CTkFrame):
         # Current voice display
         if self.selected_voice_data:
             voice_name = self.selected_voice_data['name']
-            voice_type = self.selected_voice_data.get('type', 'preset')
+            voice_type = self.selected_voice_data.get('type', 'cloned')
             display_text = f"{voice_name} ({voice_type})"
             colors = get_theme_colors()
             text_color = colors["text_primary"]
@@ -934,8 +938,6 @@ class NarrationTab(ctk.CTkFrame):
         
         # Validate voices
         available_voices = []
-        preset_voices = self.tts_engine.get_supported_speakers()
-        available_voices.extend(preset_voices)
         
         lib_voices = self.voice_library.get_all_voices()
         for voice in lib_voices:
@@ -991,18 +993,7 @@ class NarrationTab(ctk.CTkFrame):
                 if voice_data:
                     voice_type = voice_data.get("type")
                     
-                    if voice_type == "preset":
-                        # Preset voice from library
-                        logger.debug(f"Using preset voice: {voice}")
-                        wavs, sr = self.tts_engine.generate_voice_preset(
-                            text=text,
-                            preset_name=voice_data.get("preset_name", voice),
-                            **gen_params
-                        )
-                        # Track usage
-                        self.voice_library.increment_usage(voice_data["id"])
-                        
-                    elif voice_type == "cloned":
+                    if voice_type == "cloned":
                         # Cloned voice - load prompt and use Base model
                         logger.debug(f"Loading cloned voice: {voice_data['id']}")
                         try:
@@ -1057,15 +1048,6 @@ class NarrationTab(ctk.CTkFrame):
                     else:
                         logger.error(f"Unknown voice type: {voice_type}")
                         continue
-                        
-                elif voice in self.tts_engine.get_supported_speakers():
-                    # Fallback: preset voice not yet in library (shouldn't happen after import)
-                    logger.debug(f"Using preset voice (fallback): {voice}")
-                    wavs, sr = self.tts_engine.generate_voice_preset(
-                        text=text,
-                        preset_name=voice,
-                        **gen_params
-                    )
                 else:
                     logger.error(f"Voice not found: {voice}")
                     continue

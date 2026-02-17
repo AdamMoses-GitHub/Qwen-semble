@@ -63,13 +63,12 @@ class VoiceCard(ctk.CTkFrame):
         name_label.pack(side="left", fill="x", expand=True)
         
         # Type badge
-        voice_type = self.voice_data.get("type", "preset")
+        voice_type = self.voice_data.get("type", "cloned")
         type_colors = {
             "cloned": ("#2563eb", "#60a5fa"),
-            "designed": ("#c026d3", "#e879f9"),
-            "preset": ("#16a34a", "#4ade80")
+            "designed": ("#c026d3", "#e879f9")
         }
-        type_color = type_colors.get(voice_type, type_colors["preset"])
+        type_color = type_colors.get(voice_type, type_colors["cloned"])
         colors = get_theme_colors()
         
         type_badge = ctk.CTkLabel(
@@ -237,7 +236,7 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         
         self.selected_voice = current_selection
         self.selected_voice_data = None  # Store full voice data
-        self.filter_type = "all"  # all, preset, cloned, designed
+        self.filter_type = "all"  # all, cloned, designed
         self.search_query = ""
         self.voice_cards = {}  # voice_name -> VoiceCard widget
         self.voice_data_map = {}  # voice_name -> voice_data dict
@@ -308,7 +307,7 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         filter_label.pack(side="left", padx=(0, 10))
         
         self.filter_buttons = {}
-        for filter_type, label in [("all", "All"), ("preset", "Preset"), ("cloned", "Cloned"), ("designed", "Designed")]:
+        for filter_type, label in [("all", "All"), ("cloned", "Cloned"), ("designed", "Designed")]:
             btn = ctk.CTkButton(
                 filter_frame,
                 text=label,
@@ -371,7 +370,7 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         # Get all voices
         all_voices = []
         
-        # Get voices from library (includes presets now)
+        # Get voices from library
         if self.filter_type == "all":
             all_voices = self.voice_library.get_all_voices()
         else:
@@ -432,7 +431,7 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         """Set voice type filter.
         
         Args:
-            filter_type: Filter type (all, preset, cloned, designed)
+            filter_type: Filter type (all, cloned, designed)
         """
         self.filter_type = filter_type
         
@@ -478,11 +477,6 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
             
             # Stop any currently playing audio
             self.audio_player.stop()
-            
-            if voice_type == "preset":
-                # Generate quick sample for preset voices
-                messagebox.showinfo("Preview", "Preset voice preview not yet implemented.\nSelect to use this voice.")
-                return
             
             # For library voices, try to play first template test or sample
             if voice_type in ("cloned", "designed"):

@@ -202,7 +202,7 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
         
         # Update the UI
         voice_name = voice_data['name']
-        voice_type = voice_data.get('type', 'preset')
+        voice_type = voice_data.get('type', 'cloned')
         display_text = f"{voice_name} ({voice_type})"
         
         row = self.speaker_rows[speaker]
