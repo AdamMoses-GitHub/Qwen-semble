@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from utils.error_handler import logger
+from utils.voice_description_generator import generate_random_voice_descriptions
 
 
 class WorkspaceManager:
@@ -125,6 +126,10 @@ class WorkspaceManager:
             # Create default config files if they don't exist
             config_file = path / 'config.json'
             if not config_file.exists():
+                # Generate random voice description examples on first launch
+                logger.info("Generating random voice description examples...")
+                voice_descriptions = generate_random_voice_descriptions(25)
+                
                 default_config = {
                     "device": "cuda:0",
                     "model_size": "1.7B",
@@ -139,11 +144,17 @@ class WorkspaceManager:
                         "max_new_tokens": 2048,
                         "temperature": 0.7,
                         "top_p": 0.9
-                    }
+                    },
+                    "template_test_transcripts": [
+                        "I am a voice model. I was created using the magic of computing.",
+                        "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
+                        "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
+                    ],
+                    "example_voice_descriptions": voice_descriptions
                 }
                 with open(config_file, 'w', encoding='utf-8') as f:
                     json.dump(default_config, f, indent=2)
-                logger.debug("Created default config.json")
+                logger.debug(f"Created default config.json with {len(voice_descriptions)} random voice examples")
             
             voice_lib_file = path / 'voice_library.json'
             if not voice_lib_file.exists():

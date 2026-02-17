@@ -343,30 +343,30 @@ class VoiceCreationTab(ctk.CTkFrame):
         )
         load_desc_btn.grid(row=3, column=0, pady=5)
         
-        # Example prompts
-        example_label = ctk.CTkLabel(panel, text="Example Descriptions:", font=("Arial", 11, "bold"))
-        example_label.grid(row=4, column=0, sticky="w", padx=10, pady=(15, 5))
+        # Example prompts header with refresh button
+        example_header_frame = ctk.CTkFrame(panel)
+        example_header_frame.grid(row=4, column=0, sticky="ew", padx=10, pady=(15, 5))
         
-        example_frame = ctk.CTkScrollableFrame(panel, height=120)
-        example_frame.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
+        example_label = ctk.CTkLabel(example_header_frame, text="Example Descriptions:", font=("Arial", 11, "bold"))
+        example_label.pack(side="left")
         
-        # Load example descriptions from config
-        example_descriptions = self.config.get("example_voice_descriptions", [
-            "Young Asian female voice, calm and professional, software engineer tone with clear articulation",
-            "Elderly African American male voice, wise and warm, deep storyteller quality with gravitas",
-            "Middle-aged British female voice, authoritative broadcaster tone, crisp BBC news presenter style"
-        ])  # Fallback defaults (full list is in config)
+        refresh_examples_btn = ctk.CTkButton(
+            example_header_frame,
+            text="🔄 Generate New Examples",
+            command=self._regenerate_examples,
+            width=180,
+            height=28,
+            fg_color="gray40",
+            hover_color="gray30"
+        )
+        refresh_examples_btn.pack(side="right", padx=(10, 0))
         
-        for prompt in example_descriptions:
-            btn = ctk.CTkButton(
-                example_frame,
-                text=prompt,
-                command=lambda p=prompt: self._use_example(p),
-                anchor="w",
-                height=30,
-                width=600  # Set minimum width for readability
-            )
-            btn.pack(padx=5, pady=2)  # No fill="x" to allow horizontal scrolling
+        # Store example frame as instance variable for refreshing
+        self.example_frame = ctk.CTkScrollableFrame(panel, height=120)
+        self.example_frame.grid(row=5, column=0, sticky="ew", padx=10, pady=5)
+        
+        # Populate examples
+        self._populate_example_descriptions()
         
         # Language selection
         lang_frame = ctk.CTkFrame(panel)
@@ -669,6 +669,47 @@ class VoiceCreationTab(ctk.CTkFrame):
         """Use example prompt (design mode)."""
         self.description_text.delete("1.0", "end")
         self.description_text.insert("1.0", prompt)
+    
+    def _populate_example_descriptions(self) -> None:
+        """Populate example description buttons from config."""
+        # Clear existing buttons
+        for widget in self.example_frame.winfo_children():
+            widget.destroy()
+        
+        # Load example descriptions from config
+        example_descriptions = self.config.get("example_voice_descriptions", [])
+        
+        if not example_descriptions:
+            # Fallback if config is empty (shouldn't happen)
+            no_examples_label = ctk.CTkLabel(
+                self.example_frame,
+                text="No examples available. Click 'Generate New Examples' to create some.",
+                text_color="gray"
+            )
+            no_examples_label.pack(padx=5, pady=10)
+            return
+        
+        # Create button for each example
+        for prompt in example_descriptions:
+            btn = ctk.CTkButton(
+                self.example_frame,
+                text=prompt,
+                command=lambda p=prompt: self._use_example(p),
+                anchor="w",
+                height=30,
+                width=600  # Set minimum width for readability
+            )
+            btn.pack(padx=5, pady=2)  # No fill="x" to allow horizontal scrolling
+    
+    def _regenerate_examples(self) -> None:
+        """Regenerate random example descriptions."""
+        # Regenerate descriptions in config
+        self.config.regenerate_voice_descriptions(25)
+        
+        # Refresh the UI
+        self._populate_example_descriptions()
+        
+        logger.info("Generated 25 new random voice description examples")
     
     def _load_description_from_file(self) -> None:
         """Load description from text file (design mode)."""

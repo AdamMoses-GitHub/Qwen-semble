@@ -8,6 +8,8 @@ from typing import Any, Dict, Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from utils.workspace_manager import WorkspaceManager
 
+from utils.voice_description_generator import generate_random_voice_descriptions
+
 
 class Config:
     """Application configuration manager."""
@@ -45,33 +47,7 @@ class Config:
                 "I am a voice model. A. B. C. D. E. 1. 2. 3. 4. 5",
                 "I am a voice model. Row, row, row your boat, gently down the stream. Merrily, merrily, merrily, life is but a dream."
             ],
-            "example_voice_descriptions": [
-                "Young Asian female voice, calm and professional, software engineer tone with clear articulation",
-                "Elderly African American male voice, wise and warm, deep storyteller quality with gravitas",
-                "Middle-aged British female voice, authoritative broadcaster tone, crisp BBC news presenter style",
-                "Young Hispanic male voice, enthusiastic and energetic, sports commentator with rising inflections",
-                "Mature Indian female voice, soothing and gentle, yoga instructor with meditative pacing",
-                "Teen Caucasian female voice, bubbly and excited, social media influencer with vocal fry",
-                "Middle-aged Middle Eastern male voice, deep and commanding, CEO presence with confidence",
-                "Young African female voice, bright and cheerful, customer service representative warmth",
-                "Elderly European female voice, nostalgic and tender, grandmother reading bedtime stories",
-                "Young Australian male voice, laid-back and friendly, surfer casual with relaxed drawl",
-                "Middle-aged Japanese female voice, precise and respectful, business professional with formality",
-                "Teen Latino male voice, nervous and shy, introverted student with hesitant speech patterns",
-                "Mature Russian male voice, stern and serious, military commander with authoritative bass",
-                "Young Irish female voice, playful and witty, comedian with excellent comedic timing",
-                "Middle-aged African male voice, passionate and motivating, life coach with inspirational energy",
-                "Elderly Jewish male voice, scholarly and contemplative, professor lecturing with wisdom",
-                "Young Korean female voice, cute and high-pitched, K-pop idol with aegyo vocal style",
-                "Middle-aged Italian male voice, expressive and dramatic, opera singer with rich resonance",
-                "Young French female voice, sophisticated and elegant, fashion designer with breathy quality",
-                "Teen American male voice, confident and boastful, teenage athlete with cocky swagger",
-                "Mature Chinese female voice, patient and nurturing, elementary teacher with maternal warmth",
-                "Young German male voice, precise and technical, engineer explaining complex concepts clearly",
-                "Middle-aged Canadian female voice, apologetic and kind, therapist with empathetic softness",
-                "Elderly Scottish male voice, gruff and humorous, retired sailor storytelling with raspy charm",
-                "Young Brazilian female voice, rhythmic and lively, samba dancer with vibrant melodic energy"
-            ]
+            "example_voice_descriptions": []  # Generated randomly on first launch
         }
         
         self.load()
@@ -87,6 +63,12 @@ class Config:
             else:
                 self.config = self.defaults.copy()
                 self.save()
+            
+            # Generate example voice descriptions if empty
+            if not self.config.get("example_voice_descriptions"):
+                self.config["example_voice_descriptions"] = generate_random_voice_descriptions(25)
+                self.save()
+                
         except Exception as e:
             print(f"Error loading config: {e}. Using defaults.")
             self.config = self.defaults.copy()
@@ -160,4 +142,13 @@ class Config:
     def reset_to_defaults(self) -> None:
         """Reset configuration to default values."""
         self.config = self.defaults.copy()
+        self.save()
+    
+    def regenerate_voice_descriptions(self, count: int = 25) -> None:
+        """Regenerate random voice description examples.
+        
+        Args:
+            count: Number of descriptions to generate (default: 25)
+        """
+        self.config["example_voice_descriptions"] = generate_random_voice_descriptions(count)
         self.save()
