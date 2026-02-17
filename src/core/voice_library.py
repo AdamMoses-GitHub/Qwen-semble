@@ -2,10 +2,13 @@
 
 import json
 from pathlib import Path
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, TYPE_CHECKING
 from datetime import datetime
 import pickle
 import shutil
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 from utils.error_handler import logger
 
@@ -13,33 +16,23 @@ from utils.error_handler import logger
 class VoiceLibrary:
     """Manage saved cloned and designed voices."""
     
-    def __init__(self, library_path: str = "config/voice_library.json", workspace_dir: Optional[Path] = None):
+    def __init__(self, workspace_mgr: 'WorkspaceManager'):
         """Initialize voice library.
         
         Args:
-            library_path: Path to voice library JSON file (relative to workspace if workspace_dir provided)
-            workspace_dir: Root workspace directory (if None, uses old structure)
+            workspace_mgr: WorkspaceManager instance
         """
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
-        # Resolve paths based on workspace mode
-        if workspace_dir:
-            self.library_path = workspace_dir / "voice_library.json"
-            self.cloned_voices_dir = workspace_dir / "cloned_voices"
-            self.designed_voices_dir = workspace_dir / "designed_voices"
-        else:
-            self.library_path = Path(library_path)
-            self.cloned_voices_dir = Path("output/cloned_voices")
-            self.designed_voices_dir = Path("output/designed_voices")
+        # Get paths from workspace manager
+        self.library_path = workspace_mgr.get_voice_library_file()
+        self.cloned_voices_dir = workspace_mgr.get_cloned_voices_dir()
+        self.designed_voices_dir = workspace_mgr.get_designed_voices_dir()
         
         self.library: Dict[str, List[Dict]] = {
             "cloned_voices": [],
             "designed_voices": []
         }
-        
-        # Ensure directories exist
-        self.cloned_voices_dir.mkdir(parents=True, exist_ok=True)
-        self.designed_voices_dir.mkdir(parents=True, exist_ok=True)
         
         self.load()
     

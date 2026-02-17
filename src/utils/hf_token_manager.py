@@ -2,7 +2,10 @@
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 from utils.error_handler import logger
 
@@ -10,16 +13,16 @@ from utils.error_handler import logger
 class HFTokenManager:
     """Manage HuggingFace authentication tokens."""
     
-    def __init__(self, workspace_dir: Path, use_local: bool = False):
+    def __init__(self, workspace_mgr: 'WorkspaceManager', use_local: bool = False):
         """Initialize token manager.
         
         Args:
-            workspace_dir: Workspace directory path
+            workspace_mgr: WorkspaceManager instance
             use_local: Whether to use local token storage
         """
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         self.use_local = use_local
-        self.token_file = workspace_dir / "huggingface_token.txt"
+        self.token_file = workspace_mgr.get_hf_token_file()
     
     def get_token(self) -> Optional[str]:
         """Get HuggingFace token from appropriate location.
@@ -103,7 +106,7 @@ class HFTokenManager:
             True if successful
         """
         try:
-            self.workspace_dir.mkdir(parents=True, exist_ok=True)
+            self.token_file.parent.mkdir(parents=True, exist_ok=True)
             with open(self.token_file, 'w', encoding='utf-8') as f:
                 f.write(token)
             

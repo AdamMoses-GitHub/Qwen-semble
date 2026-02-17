@@ -2,28 +2,25 @@
 
 import logging
 from pathlib import Path
-from typing import Tuple, Optional
+from typing import Tuple, Optional, TYPE_CHECKING
 import traceback
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 
 # Logger will be configured after workspace is determined
 logger = logging.getLogger('Qwen-semble')
 
 
-def configure_logging(workspace_dir: Optional[Path] = None):
+def configure_logging(workspace_mgr: 'WorkspaceManager'):
     """Configure logging with workspace-aware paths.
     
     Args:
-        workspace_dir: Root workspace directory (if None, uses legacy output/logs)
+        workspace_mgr: WorkspaceManager instance to get log directory
     """
-    # Determine log directory
-    if workspace_dir:
-        log_dir = workspace_dir / "logs"
-    else:
-        log_dir = Path('output/logs')
-    
-    # Ensure log directory exists
-    log_dir.mkdir(parents=True, exist_ok=True)
+    # Get log directory from workspace manager
+    log_dir = workspace_mgr.get_logs_dir()
     
     log_file = log_dir / "app.log"
     
@@ -51,8 +48,8 @@ def configure_logging(workspace_dir: Optional[Path] = None):
     logger.info(f"Logging configured: {log_file}")
 
 
-# Configure with default legacy path for initial imports
-configure_logging()
+# Note: Logger is initially unconfigured (no file output)
+# configure_logging() must be called after WorkspaceManager is initialized
 
 
 class QwenTTSError(Exception):

@@ -1,10 +1,8 @@
 """Workspace management for portable mode and centralized data storage."""
 
-import json
 import os
-import shutil
+import json
 from pathlib import Path
-from datetime import datetime
 from typing import Optional, Tuple
 
 from utils.error_handler import logger
@@ -33,7 +31,7 @@ class WorkspaceManager:
         # Load config to check if working directory exists
         try:
             config = self.load_config()
-            working_dir = self.resolve_path(config['working_directory'], config['path_type'])
+            working_dir = Path(config['working_directory'])
             
             if not working_dir.exists():
                 logger.debug("Working directory not found - treating as first launch")
@@ -49,7 +47,7 @@ class WorkspaceManager:
         """Load working directory configuration.
         
         Returns:
-            Configuration dictionary
+            Configuration dictionary with 'working_directory' key
             
         Raises:
             FileNotFoundError: If config file doesn't exist
@@ -60,43 +58,37 @@ class WorkspaceManager:
         
         try:
             with open(self.CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+                path_str = f.read().strip()
             
-            # Validate required fields
-            required = ['working_directory', 'path_type']
-            for field in required:
-                if field not in config:
-                    raise ValueError(f"Missing required field: {field}")
+            if not path_str:
+                raise ValueError("Config file is empty")
             
-            self.config = config
-            logger.info(f"Loaded workspace config: {config['working_directory']} ({config['path_type']})")
-            return config
+            # Convert to absolute path
+            working_dir = Path(path_str).resolve()
             
-        except json.JSONDecodeError as e:
-            logger.error(f"Invalid JSON in config file: {e}")
+            self.config = {'working_directory': str(working_dir)}
+            logger.info(f"Loaded workspace config: {working_dir}")
+            return self.config
+            
+        except Exception as e:
+            logger.error(f"Error reading config file: {e}")
             raise ValueError(f"Invalid config file format: {e}")
     
-    def save_config(self, working_dir: str, path_type: str, use_local_token: bool = False) -> None:
+    def save_config(self, working_dir: str) -> None:
         """Save working directory configuration.
         
         Args:
-            working_dir: Path to working directory
-            path_type: 'relative' or 'absolute'
-            use_local_token: Whether to store HuggingFace token in workspace
+            working_dir: Path to working directory (will be saved as absolute path)
         """
-        config = {
-            "working_directory": working_dir,
-            "path_type": path_type,
-            "created": datetime.now().isoformat(),
-            "use_local_hf_token": use_local_token
-        }
+        # Convert to absolute path
+        abs_path = Path(working_dir).resolve()
         
         try:
             with open(self.CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(config, f, indent=2)
+                f.write(str(abs_path))
             
-            self.config = config
-            logger.info(f"Saved workspace config: {working_dir} ({path_type})")
+            self.config = {'working_directory': str(abs_path)}
+            logger.info(f"Saved workspace config: {abs_path}")
             
         except Exception as e:
             logger.error(f"Failed to save config: {e}")
@@ -198,87 +190,6 @@ class WorkspaceManager:
         
         return True, ""
     
-    def migrate_existing_data(self, workspace_dir: Path) -> Tuple[bool, str]:
-        """Migrate data from old structure to workspace.
-        
-        Args:
-            workspace_dir: Destination workspace directory
-            
-        Returns:
-            Tuple of (success, message)
-        """
-        try:
-            logger.info("Starting data migration to workspace")
-            
-            # Define migration mappings
-            migrations = [
-                (Path("output/cloned_voices"), workspace_dir / "cloned_voices"),
-                (Path("output/designed_voices"), workspace_dir / "designed_voices"),
-                (Path("output/narrations"), workspace_dir / "narrations"),
-                (Path("output/logs"), workspace_dir / "logs"),
-                (Path("config/app_config.json"), workspace_dir / "config.json"),
-                (Path("config/voice_library.json"), workspace_dir / "voice_library.json"),
-            ]
-            
-            migrated_items = []
-            
-            for source, dest in migrations:
-                if not source.exists():
-                    logger.debug(f"Source not found, skipping: {source}")
-                    continue
-                
-                try:
-                    if source.is_dir():
-                        # Copy directory contents
-                        if dest.exists():
-                            # Merge with existing
-                            shutil.copytree(source, dest, dirs_exist_ok=True)
-                        else:
-                            shutil.copytree(source, dest)
-                        logger.info(f"Migrated directory: {source} -> {dest}")
-                    else:
-                        # Copy file
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(source, dest)
-                        logger.info(f"Migrated file: {source} -> {dest}")
-                    
-                    migrated_items.append(source.name)
-                    
-                except Exception as e:
-                    logger.error(f"Failed to migrate {source}: {e}")
-                    # Continue with other items
-            
-            if migrated_items:
-                message = f"Migrated {len(migrated_items)} items: {', '.join(migrated_items)}"
-                logger.info(f"Migration completed: {message}")
-                return True, message
-            else:
-                logger.info("No data to migrate")
-                return True, "No existing data found to migrate"
-            
-        except Exception as e:
-            logger.error(f"Migration failed: {e}")
-            return False, f"Migration failed: {e}"
-    
-    def detect_existing_data(self) -> bool:
-        """Check if old data structure exists.
-        
-        Returns:
-            True if old data found, False otherwise
-        """
-        old_paths = [
-            Path("output"),
-            Path("config/app_config.json"),
-            Path("config/voice_library.json")
-        ]
-        
-        for path in old_paths:
-            if path.exists():
-                logger.debug(f"Found existing data: {path}")
-                return True
-        
-        return False
-    
     def get_working_directory(self) -> Path:
         """Get the current working directory path.
         
@@ -294,32 +205,94 @@ class WorkspaceManager:
         if not self.config:
             self.config = self.load_config()
         
-        working_dir = self.resolve_path(
-            self.config['working_directory'],
-            self.config['path_type']
-        )
+        working_dir = Path(self.config['working_directory'])
         
         self.working_dir = working_dir
         return working_dir
     
-    def resolve_path(self, path_str: str, path_type: str) -> Path:
-        """Resolve path based on type.
+    def get_config_file(self) -> Path:
+        """Get path to config.json file.
         
-        Args:
-            path_str: Path string
-            path_type: 'relative' or 'absolute'
-            
         Returns:
-            Resolved Path object
+            Path to config.json
         """
-        path = Path(path_str)
+        return self.get_working_directory() / "config.json"
+    
+    def get_voice_library_file(self) -> Path:
+        """Get path to voice_library.json file.
         
-        if path_type == 'relative':
-            # Resolve relative to application directory
-            app_dir = Path(__file__).parent.parent.parent
-            return (app_dir / path).resolve()
-        else:
-            return path.resolve()
+        Returns:
+            Path to voice_library.json
+        """
+        return self.get_working_directory() / "voice_library.json"
+    
+    def get_cloned_voices_dir(self) -> Path:
+        """Get path to cloned voices directory.
+        
+        Creates directory if it doesn't exist.
+        
+        Returns:
+            Path to cloned_voices directory
+        """
+        dir_path = self.get_working_directory() / "cloned_voices"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+    
+    def get_designed_voices_dir(self) -> Path:
+        """Get path to designed voices directory.
+        
+        Creates directory if it doesn't exist.
+        
+        Returns:
+            Path to designed_voices directory
+        """
+        dir_path = self.get_working_directory() / "designed_voices"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+    
+    def get_narrations_dir(self) -> Path:
+        """Get path to narrations output directory.
+        
+        Creates directory if it doesn't exist.
+        
+        Returns:
+            Path to narrations directory
+        """
+        dir_path = self.get_working_directory() / "narrations"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+    
+    def get_temp_dir(self) -> Path:
+        """Get path to temporary files directory.
+        
+        Creates directory if it doesn't exist.
+        
+        Returns:
+            Path to temp directory
+        """
+        dir_path = self.get_working_directory() / "temp"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+    
+    def get_logs_dir(self) -> Path:
+        """Get path to logs directory.
+        
+        Creates directory if it doesn't exist.
+        
+        Returns:
+            Path to logs directory
+        """
+        dir_path = self.get_working_directory() / "logs"
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+    
+    def get_hf_token_file(self) -> Path:
+        """Get path to HuggingFace token file.
+        
+        Returns:
+            Path to huggingface_token.txt
+        """
+        return self.get_working_directory() / "huggingface_token.txt"
     
     def get_estimated_space_gb(self) -> Tuple[float, float]:
         """Get estimated disk space requirements for workspace.

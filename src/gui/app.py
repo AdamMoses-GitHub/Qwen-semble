@@ -4,13 +4,16 @@ import customtkinter as ctk
 from tkinter import messagebox
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 from core.tts_engine import TTSEngine
 from core.voice_library import VoiceLibrary
 from core.audio_utils import AudioPlayer
 from utils.config import Config
-from utils.error_handler import logger, ensure_directory
+from utils.error_handler import logger
 from utils.threading_helpers import run_in_thread
 
 from gui.tab_voice_creation import VoiceCreationTab
@@ -23,21 +26,21 @@ from gui.components import LoadingOverlay
 class QwenTTSApp(ctk.CTk):
     """Main application window."""
     
-    def __init__(self, workspace_dir: Path = None):
+    def __init__(self, workspace_mgr: 'WorkspaceManager'):
         """Initialize main application.
         
         Args:
-            workspace_dir: Root workspace directory (None for legacy mode)
+            workspace_mgr: WorkspaceManager instance
         """
         super().__init__()
         
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
         # Configure window
         self.title("Qwen-semble - TTS Voice Studio")
         
         # Load configuration
-        self.config = Config(workspace_dir=workspace_dir)
+        self.config = Config(workspace_mgr=workspace_mgr)
         window_width = self.config.get("window_width", 1200)
         window_height = self.config.get("window_height", 800)
         self.geometry(f"{window_width}x{window_height}")
@@ -51,13 +54,9 @@ class QwenTTSApp(ctk.CTk):
         # Initialize components
         logger.debug("Initializing application components...")
         self.tts_engine = None
-        self.voice_library = VoiceLibrary(workspace_dir=workspace_dir)
+        self.voice_library = VoiceLibrary(workspace_mgr=workspace_mgr)
         self.audio_player = AudioPlayer()
         logger.debug("Voice library and audio player initialized")
-        
-        # Ensure output directories exist
-        logger.debug("Ensuring output directories exist...")
-        self._ensure_directories()
         
         # Create UI
         logger.debug("Creating UI components...")
@@ -72,27 +71,6 @@ class QwenTTSApp(ctk.CTk):
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
         
         logger.info("Application initialized")
-    
-    def _ensure_directories(self) -> None:
-        """Ensure required directories exist."""
-        if self.workspace_dir:
-            # Workspace mode - directories are managed by workspace_manager
-            logger.debug("Workspace mode - directories managed by WorkspaceManager")
-        else:
-            # Legacy mode - create old structure
-            logger.debug("Legacy mode - checking/creating required directories...")
-            directories = [
-                "output",
-                "output/cloned_voices",
-                "output/designed_voices",
-                "output/narrations",
-                "output/temp",
-                "output/logs",
-                "config"
-            ]
-            for directory in directories:
-                ensure_directory(directory)
-            logger.debug(f"Created/verified {len(directories)} directories")
     
     def _create_menu(self) -> None:
         """Create menu bar (simplified for cross-platform)."""
@@ -151,7 +129,7 @@ class QwenTTSApp(ctk.CTk):
                 self.tabview.tab("Voice Model Library"),
                 self.voice_library,
                 self.config,
-                workspace_dir=self.workspace_dir
+                workspace_mgr=self.workspace_mgr
             )
             
             # Narration tab (create second to get refresh callback)
@@ -160,7 +138,7 @@ class QwenTTSApp(ctk.CTk):
                 self.tts_engine,
                 self.voice_library,
                 self.config,
-                workspace_dir=self.workspace_dir
+                workspace_mgr=self.workspace_mgr
             )
             
             # Voice Creation tab (unified clone and design with refresh callbacks)
@@ -171,7 +149,7 @@ class QwenTTSApp(ctk.CTk):
                 self.config,
                 narration_refresh_callback=self.narration_tab.refresh_voice_list,
                 saved_voices_refresh_callback=self.saved_voices_tab.refresh,
-                workspace_dir=self.workspace_dir
+                workspace_mgr=self.workspace_mgr
             )
             
             # Settings tab
@@ -180,7 +158,7 @@ class QwenTTSApp(ctk.CTk):
                 self.tts_engine,
                 self.config,
                 self._reload_models,
-                workspace_dir=self.workspace_dir
+                workspace_mgr=self.workspace_mgr
             )
             
             logger.info("Tabs initialized")
@@ -267,7 +245,7 @@ class QwenTTSApp(ctk.CTk):
             # Initialize engine without loading models (for settings access)
             self.tts_engine = TTSEngine(
                 device=self.config.get("device", "cuda:0"),
-                workspace_dir=self.workspace_dir
+                workspace_dir=self.workspace_mgr.get_working_directory()
             )
             self._init_tabs()
     
@@ -295,7 +273,7 @@ class QwenTTSApp(ctk.CTk):
                     device=device,
                     dtype="bfloat16",
                     use_flash_attention=use_flash_attention,
-                    workspace_dir=self.workspace_dir
+                    workspace_dir=self.workspace_mgr.get_working_directory()
                 )
                 logger.debug("TTSEngine instance created")
                 
@@ -331,7 +309,7 @@ class QwenTTSApp(ctk.CTk):
                 )
                 # Initialize engine in CPU mode as fallback
                 logger.info("Initializing fallback TTS engine in CPU mode")
-                self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_dir)
+                self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_mgr.get_working_directory())
             else:
                 logger.info("Model loading successful, proceeding with tab initialization")
             
@@ -344,7 +322,7 @@ class QwenTTSApp(ctk.CTk):
             loading_dialog.close()
             messagebox.showerror("Error", f"Failed to load models: {error}")
             # Initialize with CPU fallback
-            self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_dir)
+            self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_mgr.get_working_directory())
             self._init_tabs()
         
         # Run loading in background thread
@@ -387,11 +365,7 @@ class QwenTTSApp(ctk.CTk):
     
     def _open_workspace_folder(self) -> None:
         """Open working directory in file explorer."""
-        if self.workspace_dir:
-            workspace_path = self.workspace_dir.absolute()
-        else:
-            # Legacy mode - open the output directory
-            workspace_path = Path(self.config.get("output_dir", "output")).absolute()
+        workspace_path = self.workspace_mgr.get_working_directory().absolute()
         
         try:
             if os.name == 'nt':  # Windows
@@ -437,11 +411,11 @@ class QwenTTSApp(ctk.CTk):
         self.destroy()
 
 
-def run(workspace_dir: Optional[Path] = None):
+def run(workspace_mgr: 'WorkspaceManager'):
     """Run the application.
     
     Args:
-        workspace_dir: Root workspace directory (None for legacy mode)
+        workspace_mgr: WorkspaceManager instance
     """
-    app = QwenTTSApp(workspace_dir)
+    app = QwenTTSApp(workspace_mgr)
     app.mainloop()

@@ -1,5 +1,7 @@
 """Voice cloning tab interface."""
 
+from typing import TYPE_CHECKING, Optional
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -12,11 +14,14 @@ from utils.error_handler import validate_audio_for_cloning, logger, show_error_d
 from utils.threading_helpers import TTSWorker
 from gui.components import AudioPlayerWidget, FilePickerWidget
 
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
+
 
 class VoiceCloneTab(ctk.CTkFrame):
     """Voice cloning tab."""
     
-    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_dir=None):
+    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_mgr: Optional['WorkspaceManager'] = None):
         """Initialize voice clone tab.
         
         Args:
@@ -26,7 +31,7 @@ class VoiceCloneTab(ctk.CTkFrame):
             config: Configuration instance
             narration_refresh_callback: Callback to refresh narration tab voice list
             saved_voices_refresh_callback: Callback to refresh saved voices tab
-            workspace_dir: Root workspace directory (None for legacy mode)
+            workspace_mgr: Workspace manager instance
         """
         super().__init__(parent)
         
@@ -35,7 +40,7 @@ class VoiceCloneTab(ctk.CTkFrame):
         self.config = config
         self.narration_refresh_callback = narration_refresh_callback
         self.saved_voices_refresh_callback = saved_voices_refresh_callback
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
         self.ref_audio_path = None
         self.current_voice_prompt = None

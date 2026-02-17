@@ -1,5 +1,7 @@
 """Unified voice creation tab interface - supports both cloning and design."""
 
+from typing import TYPE_CHECKING, Optional
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -11,11 +13,14 @@ from utils.error_handler import validate_audio_for_cloning, logger, show_error_d
 from utils.threading_helpers import TTSWorker
 from gui.components import AudioPlayerWidget, FilePickerWidget
 
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
+
 
 class VoiceCreationTab(ctk.CTkFrame):
     """Unified voice creation tab supporting both clone and design modes."""
     
-    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_dir=None):
+    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_mgr: Optional['WorkspaceManager'] = None):
         """Initialize voice creation tab.
         
         Args:
@@ -25,7 +30,7 @@ class VoiceCreationTab(ctk.CTkFrame):
             config: Configuration instance
             narration_refresh_callback: Callback to refresh narration tab voice list
             saved_voices_refresh_callback: Callback to refresh saved voices tab
-            workspace_dir: Root workspace directory (None for legacy mode)
+            workspace_mgr: Workspace manager instance
         """
         super().__init__(parent)
         
@@ -34,7 +39,7 @@ class VoiceCreationTab(ctk.CTkFrame):
         self.config = config
         self.narration_refresh_callback = narration_refresh_callback
         self.saved_voices_refresh_callback = saved_voices_refresh_callback
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
         # Mode state
         self.current_mode = "clone"  # "clone" or "design"
@@ -1037,11 +1042,10 @@ class VoiceCreationTab(ctk.CTkFrame):
         
         try:
             # Save audio to temp file
-            if self.workspace_dir:
-                temp_dir = self.workspace_dir / "temp"
+            if self.workspace_mgr:
+                temp_dir = self.workspace_mgr.get_temp_dir()
             else:
                 temp_dir = Path("output/temp")
-            
             temp_dir.mkdir(parents=True, exist_ok=True)
             
             # Create unique filename with timestamp
@@ -1132,14 +1136,14 @@ class VoiceCreationTab(ctk.CTkFrame):
         
         try:
             # Save sample audio temporarily
-            if self.workspace_dir:
-                temp_path = self.workspace_dir / "temp" / f"voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-                temp_path.parent.mkdir(parents=True, exist_ok=True)
-                temp_path = str(temp_path)
+            if self.workspace_mgr:
+                temp_dir = self.workspace_mgr.get_temp_dir()
             else:
-                temp_path = f"output/temp/voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+                temp_dir = Path("output/temp")
+            temp_path = temp_dir / f"voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
             
-            save_audio(self.sample_audio, self.sample_sr, temp_path)
+            save_audio(self.sample_audio, self.sample_sr, str(temp_path))
             
             # Save to library with template tests and custom tests
             language = self.language_combo.get()

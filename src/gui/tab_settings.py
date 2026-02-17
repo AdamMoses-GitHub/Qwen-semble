@@ -1,5 +1,7 @@
 """Settings tab interface."""
 
+from typing import TYPE_CHECKING, Optional
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -7,17 +9,20 @@ from pathlib import Path
 from utils.error_handler import logger
 from utils.theme import get_theme_colors
 
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
+
 
 class SettingsTab(ctk.CTkFrame):
     """Application settings tab."""
     
-    def __init__(self, parent, tts_engine, config, reload_callback, workspace_dir=None):
+    def __init__(self, parent, tts_engine, config, reload_callback, workspace_mgr: Optional['WorkspaceManager'] = None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.config = config
         self.reload_callback = reload_callback
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
         self._create_ui()
         
@@ -168,7 +173,7 @@ class SettingsTab(ctk.CTkFrame):
     def _create_dirs_section(self, parent) -> None:
         """Create directories section."""
         # Skip this section in workspace mode (directories managed by workspace)
-        if self.workspace_dir:
+        if self.workspace_mgr:
             # Show workspace info instead
             section = ctk.CTkFrame(parent)
             section.pack(fill="x", pady=10)
@@ -178,7 +183,7 @@ class SettingsTab(ctk.CTkFrame):
             
             info_label = ctk.CTkLabel(
                 section,
-                text=f"Active Workspace:\n{self.workspace_dir}",
+                text=f"Active Workspace:\n{self.workspace_mgr.get_working_directory()}",
                 font=("Arial", 11),
                 justify="left"
             )

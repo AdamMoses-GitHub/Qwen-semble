@@ -4,6 +4,10 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 from datetime import datetime
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 from core.transcript_parser import TranscriptParser
 from core.audio_utils import save_audio, merge_audio_segments
@@ -18,13 +22,13 @@ from gui.speaker_assignment import SpeakerAssignmentPanel
 class NarrationTab(ctk.CTkFrame):
     """Multi-voice narration tab."""
     
-    def __init__(self, parent, tts_engine, voice_library, config, workspace_dir=None):
+    def __init__(self, parent, tts_engine, voice_library, config, workspace_mgr: 'WorkspaceManager'):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.voice_library = voice_library
         self.config = config
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         self.parser = TranscriptParser()
         self._base_model_loading = False
         
@@ -412,32 +416,24 @@ class NarrationTab(ctk.CTkFrame):
         try:
             # Parse based on mode
             if mode == "single":
-                # Use selected voice or default to first available voice
+                # Always show the single voice UI first
+                self._show_single_voice_assignment()
+                
+                # Require user to select a voice first
                 if not self.selected_voice_data:
-                    # Try to get first available voice from library
-                    all_voices = self.voice_library.get_all_voices()
-                    if all_voices:
-                        self.selected_voice_data = all_voices[0]
-                        default_voice = all_voices[0]['name']
-                        logger.info(f"No voice selected, using first available: {default_voice}")
-                    else:
-                        # No voices in library - user must create one first
-                        if show_messages:
-                            messagebox.showerror(
-                                "No Voices Available", 
-                                "No voices found in library.\n\n"
-                                "Please create a voice first:\n"
-                                "• Go to 'Voice Cloning' tab to clone a voice, or\n"
-                                "• Go to 'Voice Design' tab to design a voice"
-                            )
-                        logger.error("No voices available in library")
-                        return
-                else:
-                    default_voice = self.selected_voice_data['name']
+                    if show_messages:
+                        messagebox.showwarning(
+                            "No Voice Selected",
+                            "Please select a voice first.\n\n"
+                            "Click 'Select Voice' in the Voice Assignment panel to choose a voice."
+                        )
+                    logger.warning("No voice selected in single voice mode")
+                    return
+                
+                default_voice = self.selected_voice_data['name']
                 
                 logger.debug(f"Using single voice: {default_voice}")
                 self.segments = self.parser.parse_transcript(text, mode="single", default_voice=default_voice)
-                self._show_single_voice_assignment()
             
             elif mode == "manual":
                 logger.debug("Parsing for segment voice assignment")
@@ -824,12 +820,19 @@ class NarrationTab(ctk.CTkFrame):
                 self.colored_preview_button.configure(state="disabled")
         
         if mode == "single":
-            # Single voice mode - always green success message and enable generate
-            self.assignment_info_label.configure(
-                text="Single Voice Applied To All Text",
-                text_color=colors["success_text"]
-            )
-            self.generate_button.configure(state="normal")
+            # Single voice mode - check if voice is selected
+            if self.selected_voice_data:
+                self.assignment_info_label.configure(
+                    text="Voice Model Selected",
+                    text_color=colors["success_text"]
+                )
+                self.generate_button.configure(state="normal")
+            else:
+                self.assignment_info_label.configure(
+                    text="No Voice Model Is Selected",
+                    text_color=colors["error_text"]
+                )
+                self.generate_button.configure(state="disabled")
         
         elif mode == "manual":
             # Manual/segment mode - check assignment completion
@@ -1086,10 +1089,7 @@ class NarrationTab(ctk.CTkFrame):
                 
                 # Save output
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                if self.workspace_dir:
-                    output_dir = self.workspace_dir / "narrations" / f"narration_{timestamp}"
-                else:
-                    output_dir = Path(f"output/narrations/narration_{timestamp}")
+                output_dir = self.workspace_mgr.get_narrations_dir() / f"narration_{timestamp}"
                 output_dir.mkdir(parents=True, exist_ok=True)
                 
                 output_file = output_dir / "narration_full.wav"

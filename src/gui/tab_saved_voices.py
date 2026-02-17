@@ -1,33 +1,37 @@
 """Saved voices management tab interface."""
 
+from typing import TYPE_CHECKING, Optional, List, Union
+
 import customtkinter as ctk
 from tkinter import messagebox
 from pathlib import Path
 from datetime import datetime
-from typing import Optional, List, Union
 
 from core.audio_utils import AudioPlayer
 from utils.error_handler import logger
 from utils.theme import get_theme_colors
 
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
+
 
 class SavedVoicesTab(ctk.CTkFrame):
     """Saved voices management tab."""
     
-    def __init__(self, parent, voice_library, config, workspace_dir: Optional[Path] = None):
+    def __init__(self, parent, voice_library, config, workspace_mgr: Optional['WorkspaceManager'] = None):
         """Initialize saved voices tab.
         
         Args:
             parent: Parent widget
             voice_library: Voice library instance
             config: Configuration instance
-            workspace_dir: Root workspace directory (None for legacy mode)
+            workspace_mgr: Workspace manager instance
         """
         super().__init__(parent)
         
         self.voice_library = voice_library
         self.config = config
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         self.audio_player = AudioPlayer()
         
         self.selected_voice: Optional[dict] = None

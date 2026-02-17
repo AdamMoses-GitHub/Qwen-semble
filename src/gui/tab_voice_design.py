@@ -1,5 +1,7 @@
 """Voice design tab interface."""
 
+from typing import TYPE_CHECKING, Optional
+
 import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
@@ -9,6 +11,9 @@ from core.audio_utils import save_audio
 from utils.error_handler import logger, show_error_dialog
 from utils.threading_helpers import TTSWorker
 from gui.components import AudioPlayerWidget
+
+if TYPE_CHECKING:
+    from utils.workspace_manager import WorkspaceManager
 
 
 class VoiceDesignTab(ctk.CTkFrame):
@@ -22,7 +27,7 @@ class VoiceDesignTab(ctk.CTkFrame):
         "Professional businesswoman voice, clear articulation, confident mid-range",
     ]
     
-    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_dir=None):
+    def __init__(self, parent, tts_engine, voice_library, config, narration_refresh_callback=None, saved_voices_refresh_callback=None, workspace_mgr: Optional['WorkspaceManager'] = None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
@@ -30,7 +35,7 @@ class VoiceDesignTab(ctk.CTkFrame):
         self.config = config
         self.narration_refresh_callback = narration_refresh_callback
         self.saved_voices_refresh_callback = saved_voices_refresh_callback
-        self.workspace_dir = workspace_dir
+        self.workspace_mgr = workspace_mgr
         
         self.current_description = ""
         self.sample_audio = None
@@ -495,14 +500,14 @@ class VoiceDesignTab(ctk.CTkFrame):
         
         try:
             # Save sample audio temporarily
-            if self.workspace_dir:
-                temp_path = self.workspace_dir / "temp" / f"voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
-                temp_path.parent.mkdir(parents=True, exist_ok=True)
-                temp_path = str(temp_path)
+            if self.workspace_mgr:
+                temp_dir = self.workspace_mgr.get_temp_dir()
             else:
-                temp_path = f"output/temp/voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+                temp_dir = Path("output/temp")
+            temp_path = temp_dir / f"voice_design_sample_{datetime.now().strftime('%Y%m%d_%H%M%S')}.wav"
+            temp_path.parent.mkdir(parents=True, exist_ok=True)
             
-            save_audio(self.sample_audio, self.sample_sr, temp_path)
+            save_audio(self.sample_audio, self.sample_sr, str(temp_path))
             
             # Save to library with template tests
             language = self.language_combo.get()

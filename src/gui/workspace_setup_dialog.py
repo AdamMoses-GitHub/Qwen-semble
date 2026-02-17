@@ -40,16 +40,11 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
         
         # State variables
         self.selected_path = ctk.StringVar(value="./working")
-        self.path_type = ctk.StringVar(value="relative")
-        self.use_local_token = ctk.BooleanVar(value=False)
-        self.existing_data_detected = self.workspace_manager.detect_existing_data()
-        self.should_migrate = ctk.BooleanVar(value=True)
         
         self._create_ui()
         
-        # Update preview when path or type changes
+        # Update preview when path changes
         self.selected_path.trace_add("write", lambda *args: self._update_preview())
-        self.path_type.trace_add("write", lambda *args: self._update_preview())
     
     def _create_ui(self):
         """Create dialog UI."""
@@ -63,15 +58,8 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
         # Path selection section
         self._create_path_section()
         
-        # Options section
-        self._create_options_section()
-        
         # Disk space info
         self._create_disk_space_section()
-        
-        # Migration section (if applicable)
-        if self.existing_data_detected:
-            self._create_migration_section()
         
         # Buttons (always visible at bottom, outside scrollable area)
         self._create_buttons()
@@ -126,26 +114,6 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
         )
         browse_btn.pack(side="left", padx=5)
         
-        # Path type radio buttons
-        type_frame = ctk.CTkFrame(path_frame)
-        type_frame.pack(fill="x", padx=10, pady=5)
-        
-        relative_radio = ctk.CTkRadioButton(
-            type_frame,
-            text="Use relative path (portable - recommended)",
-            variable=self.path_type,
-            value="relative"
-        )
-        relative_radio.pack(anchor="w", padx=5, pady=2)
-        
-        absolute_radio = ctk.CTkRadioButton(
-            type_frame,
-            text="Use absolute path",
-            variable=self.path_type,
-            value="absolute"
-        )
-        absolute_radio.pack(anchor="w", padx=5, pady=2)
-        
         # Preview
         preview_frame = ctk.CTkFrame(path_frame)
         preview_frame.pack(fill="x", padx=10, pady=(10, 10))
@@ -163,34 +131,6 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
         self.preview_text.pack(anchor="w", padx=5, pady=(0, 5))
         
         self._update_preview()
-    
-    def _create_options_section(self):
-        """Create options section."""
-        options_frame = ctk.CTkFrame(self.scroll_frame)
-        options_frame.pack(fill="x", padx=10, pady=10)
-        
-        title = ctk.CTkLabel(options_frame, text="Options", font=("Arial", 14, "bold"))
-        title.pack(anchor="w", padx=10, pady=(10, 5))
-        
-        # HuggingFace token checkbox with warning
-        token_frame = ctk.CTkFrame(options_frame)
-        token_frame.pack(fill="x", padx=10, pady=5)
-        
-        self.token_checkbox = ctk.CTkCheckBox(
-            token_frame,
-            text="Store HuggingFace token in workspace",
-            variable=self.use_local_token
-        )
-        self.token_checkbox.pack(anchor="w", padx=5, pady=5)
-        
-        warning_label = ctk.CTkLabel(
-            token_frame,
-            text="⚠️  More portable but less secure (token stored in plaintext)",
-            font=("Arial", 10),
-            text_color="orange",
-            anchor="w"
-        )
-        warning_label.pack(anchor="w", padx=25, pady=(0, 10))
     
     def _create_disk_space_section(self):
         """Create disk space information section."""
@@ -221,56 +161,6 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
             justify="left"
         )
         info_label.pack(anchor="w", padx=10, pady=(0, 10))
-    
-    def _create_migration_section(self):
-        """Create migration section if existing data detected."""
-        migration_frame = ctk.CTkFrame(self.scroll_frame)
-        migration_frame.pack(fill="x", padx=10, pady=10)
-        
-        title = ctk.CTkLabel(
-            migration_frame,
-            text="⚠️ Existing Data Detected",
-            font=("Arial", 14, "bold"),
-            text_color="orange"
-        )
-        title.pack(anchor="w", padx=10, pady=(10, 5))
-        
-        message = ctk.CTkLabel(
-            migration_frame,
-            text="Found data from previous installation. We can migrate it to your new workspace.",
-            font=("Arial", 11),
-            text_color="gray",
-            anchor="w",
-            justify="left"
-        )
-        message.pack(anchor="w", padx=10, pady=5)
-        
-        # Migration details
-        details = (
-            "Will migrate:\n"
-            "• Cloned voices\n"
-            "• Designed voices\n"
-            "• Narrations\n"
-            "• Configuration\n"
-            "• Logs"
-        )
-        
-        details_label = ctk.CTkLabel(
-            migration_frame,
-            text=details,
-            font=("Arial", 10),
-            text_color="gray",
-            anchor="w",
-            justify="left"
-        )
-        details_label.pack(anchor="w", padx=10, pady=5)
-        
-        migrate_checkbox = ctk.CTkCheckBox(
-            migration_frame,
-            text="Migrate existing data to workspace",
-            variable=self.should_migrate
-        )
-        migrate_checkbox.pack(anchor="w", padx=10, pady=(5, 10))
     
     def _create_buttons(self):
         """Create dialog buttons (fixed at bottom, always visible)."""
@@ -315,9 +205,7 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
         """Update the path preview."""
         try:
             path_str = self.selected_path.get()
-            path_type = self.path_type.get()
-            
-            resolved_path = self.workspace_manager.resolve_path(path_str, path_type)
+            resolved_path = Path(path_str).resolve()
             self.preview_text.configure(text=str(resolved_path))
             
         except Exception as e:
@@ -337,10 +225,8 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
                 messagebox.showerror("Error", "Please enter a workspace path.")
                 return
             
-            path_type = self.path_type.get()
-            
-            # Resolve path
-            workspace_path = self.workspace_manager.resolve_path(path_str, path_type)
+            # Resolve to absolute path
+            workspace_path = Path(path_str).resolve()
             
             # Validate path
             is_valid, error_msg = self.workspace_manager.validate_workspace(workspace_path)
@@ -372,27 +258,10 @@ class WorkspaceSetupDialog(ctk.CTkToplevel):
                 messagebox.showerror("Error", "Failed to create workspace structure.")
                 return
             
-            # Migrate existing data if requested
-            if self.existing_data_detected and self.should_migrate.get():
-                success, message = self.workspace_manager.migrate_existing_data(workspace_path)
-                if success:
-                    logger.info(f"Migration completed: {message}")
-                else:
-                    messagebox.showwarning("Migration Warning", f"Migration issue: {message}")
+            # Save configuration (absolute path as string)
+            self.workspace_manager.save_config(str(workspace_path))
             
-            # Save configuration
-            self.workspace_manager.save_config(
-                path_str,
-                path_type,
-                self.use_local_token.get()
-            )
-            
-            self.result = {
-                'path': workspace_path,
-                'path_str': path_str,
-                'path_type': path_type,
-                'use_local_token': self.use_local_token.get()
-            }
+            self.result = {'path': workspace_path}
             
             logger.info(f"Workspace created successfully at: {workspace_path}")
             messagebox.showinfo(
