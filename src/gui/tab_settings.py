@@ -110,6 +110,9 @@ class SettingsTab(ctk.CTkFrame):
         )
         size_0_6b.pack(side="left", padx=10)
         
+        # Active Model Switcher (if multiple models downloaded)
+        self._create_active_model_switcher(section)
+        
         # FlashAttention
         flash_frame = ctk.CTkFrame(section)
         flash_frame.pack(fill="x", padx=10, pady=5)
@@ -121,6 +124,141 @@ class SettingsTab(ctk.CTkFrame):
             variable=self.flash_var
         )
         flash_check.pack(side="left", padx=5)
+    
+    def _create_active_model_switcher(self, parent) -> None:
+        """Create active model switcher if multiple models are downloaded."""
+        downloaded_models = self.config.get("downloaded_models", [])
+        active_model = self.config.get("active_model", None)
+        
+        # Only show if multiple models are downloaded
+        if len(downloaded_models) <= 1:
+            return
+        
+        switcher_frame = ctk.CTkFrame(parent)
+        switcher_frame.pack(fill="x", padx=10, pady=10)
+        
+        switcher_label = ctk.CTkLabel(switcher_frame, text="Active Model:", width=150)
+        switcher_label.pack(side="left", padx=5)
+        
+        self.active_model_var = ctk.StringVar(value=active_model or downloaded_models[0])
+        self.active_model_combo = ctk.CTkComboBox(
+            switcher_frame,
+            values=downloaded_models,
+            variable=self.active_model_var,
+            width=200,
+            command=self._on_active_model_changed
+        )
+        self.active_model_combo.pack(side="left", padx=5)
+        
+        info_label = ctk.CTkLabel(
+            switcher_frame,
+            text="💡 Switch models instantly without restarting",
+            text_color="gray",
+            font=("Arial", 10)
+        )
+        info_label.pack(side="left", padx=10)
+    
+    def _on_active_model_changed(self, selected_model: str) -> None:
+        """Handle active model change.
+        
+        Args:
+            selected_model: The newly selected model size
+        """
+        logger.info(f"User requested model switch to: {selected_model}")
+        
+        response = messagebox.askyesno(
+            "Switch Model",
+            f"Switch to {selected_model} model?\n\n"
+            "This will unload the current model and load the selected one.\n"
+            "Any unsaved work will be lost.\n\n"
+            "Continue?"
+        )
+        
+        if response:
+            self._switch_model(selected_model)
+        else:
+            # User cancelled, revert selection
+            current_active = self.config.get("active_model")
+            self.active_model_var.set(current_active)
+    
+    def _switch_model(self, new_model: str) -> None:
+        """Switch to a different model.
+        
+        Args:
+            new_model: Model size to switch to
+        """
+        from gui.components import LoadingOverlay
+        from utils.threading_helpers import run_in_thread
+        
+        loading_dialog = LoadingOverlay(
+            self,
+            title="Switching Model",
+            message=f"Switching to {new_model} model..."
+        )
+        
+        def switch_task():
+            """Background task to switch models."""
+            try:
+                logger.info(f"Unloading current model...")
+                
+                # Unload current model
+                if self.tts_engine:
+                    self.tts_engine.unload_all_models()
+                
+                logger.info(f"Loading {new_model} model...")
+                loading_dialog.update_progress(30, f"Loading {new_model}...")
+                
+                # Load new model
+                self.tts_engine.load_custom_voice_model(
+                    model_size=new_model,
+                    progress_callback=lambda p, m: loading_dialog.update_progress(30 + p * 0.7, m)
+                )
+                
+                loading_dialog.update_progress(100, "Model switched!")
+                logger.info(f"Successfully switched to {new_model}")
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to switch model: {e}", exc_info=True)
+                return e
+        
+        def on_complete(result):
+            """Called when switch completes."""
+            loading_dialog.close()
+            
+            if isinstance(result, Exception):
+                logger.error(f"Model switch failed: {result}")
+                messagebox.showerror(
+                    "Switch Failed",
+                    f"Failed to switch model:\n\n{str(result)}"
+                )
+                # Revert selection
+                current_active = self.config.get("active_model")
+                self.active_model_var.set(current_active)
+            else:
+                # Update config
+                self.config.set("active_model", new_model, save=True)
+                messagebox.showinfo(
+                    "Success",
+                    f"Successfully switched to {new_model} model!"
+                )
+        
+        def on_error(error):
+            """Called if switch fails."""
+            loading_dialog.close()
+            messagebox.showerror("Error", f"Failed to switch model: {error}")
+            # Revert selection
+            current_active = self.config.get("active_model")
+            self.active_model_var.set(current_active)
+        
+        # Run in background thread
+        run_in_thread(
+            self,
+            switch_task,
+            on_success=on_complete,
+            on_error=on_error
+        )
     
     def _create_auth_section(self, parent) -> None:
         """Create HuggingFace authentication section."""

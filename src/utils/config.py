@@ -35,6 +35,8 @@ class Config:
             "window_height": 800,
             "font_size": 100,
             "use_flash_attention": True,
+            "downloaded_models": [],  # List of downloaded models: ["1.7B", "0.6B"]
+            "active_model": None,  # Currently active model: "1.7B" or "0.6B"
             "generation_params": {
                 "max_new_tokens": 2048,
                 "temperature": 0.7,

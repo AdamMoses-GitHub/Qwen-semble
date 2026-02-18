@@ -24,7 +24,7 @@ def setup_workspace():
     """Set up workspace directory and return WorkspaceManager instance.
     
     Returns:
-        WorkspaceManager instance, or None if user cancelled setup
+        Tuple of (WorkspaceManager instance, is_first_launch), or (None, False) if user cancelled setup
     """
     workspace_mgr = WorkspaceManager()
     
@@ -39,9 +39,10 @@ def setup_workspace():
         if result is None:
             # User cancelled setup
             logger.info("Workspace setup cancelled by user")
-            return None
+            return None, False
         
         logger.info(f"Workspace configured: {result['path']}")
+        return workspace_mgr, True  # First launch
         
     else:
         # Load existing workspace configuration
@@ -54,9 +55,9 @@ def setup_workspace():
         if not is_valid:
             logger.error(f"Workspace validation failed: {error_msg}")
             logger.error("Cannot continue without valid workspace")
-            return None
+            return None, False
     
-    return workspace_mgr
+    return workspace_mgr, False  # Not first launch
 
 
 def main():
@@ -73,7 +74,7 @@ def main():
         
         # Setup workspace
         logger.debug("Setting up workspace...")
-        workspace_mgr = setup_workspace()
+        workspace_mgr, is_first_launch = setup_workspace()
         
         if workspace_mgr is None:
             # User cancelled or workspace setup failed
@@ -87,9 +88,34 @@ def main():
         configure_logging(workspace_mgr)
         logger.info(f"Using workspace: {workspace_mgr.get_working_directory()}")
         
+        # Model selection on first launch
+        model_selection = None
+        if is_first_launch:
+            logger.info("First launch - showing model selection dialog")
+            from gui.model_selection_dialog import show_model_selection_dialog
+            model_selection = show_model_selection_dialog()
+            
+            if model_selection is None:
+                # User cancelled model selection
+                logger.error("Model selection cancelled by user")
+                print("\n\nModel selection is required to continue.")
+                print("Please restart the application.")
+                input("Press Enter to exit...")
+                sys.exit(1)
+            
+            logger.info(f"Model selection: {model_selection}")
+            
+            # Save model selection to config
+            from utils.config import Config
+            config = Config(workspace_mgr=workspace_mgr)
+            config.set("downloaded_models", model_selection["models"], save=False)
+            config.set("active_model", model_selection["active_model"], save=False)
+            config.set("device", model_selection["device"], save=True)
+            logger.info(f"Saved model selection to config")
+        
         # Run application
         logger.debug("Launching GUI application...")
-        run(workspace_mgr)
+        run(workspace_mgr, model_selection)
         
         logger.info("Application exited normally")
         

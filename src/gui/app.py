@@ -4,7 +4,7 @@ import customtkinter as ctk
 from tkinter import messagebox
 import os
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import Optional, Dict, List, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from utils.workspace_manager import WorkspaceManager
@@ -26,15 +26,17 @@ from gui.components import LoadingOverlay
 class QwenTTSApp(ctk.CTk):
     """Main application window."""
     
-    def __init__(self, workspace_mgr: 'WorkspaceManager'):
+    def __init__(self, workspace_mgr: 'WorkspaceManager', model_selection: Optional[Dict] = None):
         """Initialize main application.
         
         Args:
             workspace_mgr: WorkspaceManager instance
+            model_selection: Optional dict from model selection dialog (for first launch)
         """
         super().__init__()
         
         self.workspace_mgr = workspace_mgr
+        self.model_selection = model_selection  # Store for model loading
         
         # Configure window
         self.title("Qwen-semble - TTS Voice Studio")
@@ -63,9 +65,9 @@ class QwenTTSApp(ctk.CTk):
         self._create_menu()
         self._create_tabs()
         
-        # Show model download confirmation
-        logger.info("Scheduling model download confirmation...")
-        self.after(100, self._show_model_download_confirmation)
+        # Handle model loading
+        logger.info("Scheduling model initialization...")
+        self.after(100, self._initialize_models)
         
         # Handle window close
         self.protocol("WM_DELETE_WINDOW", self._on_closing)
@@ -167,107 +169,130 @@ class QwenTTSApp(ctk.CTk):
             logger.error(f"Error initializing tabs: {e}")
             messagebox.showerror("Error", f"Failed to initialize interface: {e}")
     
-    def _show_model_download_confirmation(self) -> None:
-        """Show confirmation dialog before downloading models."""
-        model_size = self.config.get("model_size", "1.7B")
-        device = self.config.get("device", "cuda:0")
+    def _initialize_models(self) -> None:
+        """Initialize models based on first launch or existing configuration."""
+        # Check if this is first launch (model_selection provided)
+        if self.model_selection is not None:
+            logger.info("First launch - using model selection from dialog")
+            
+            if self.model_selection["skip"]:
+                # User chose to skip model download
+                logger.info("User chose to skip model download")
+                self._init_without_models()
+                return
+            
+            # Models were selected, download and load them
+            models_to_download = self.model_selection["models"]
+            active_model = self.model_selection["active_model"]
+            
+            logger.info(f"Downloading models: {models_to_download}, active: {active_model}")
+            self._download_and_load_models(models_to_download, active_model)
         
-        # Models are cached in default HuggingFace cache (not workspace)
-        from pathlib import Path
-        import os
-        cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface')) / "hub"
-        
-        # Check if model is likely already downloaded
-        model_key = f"custom_voice_{model_size}"
-        from core.tts_engine import TTSEngine
-        model_repo = TTSEngine.MODELS.get(model_key, "")
-        
-        # Simple heuristic: if cache directory exists and has substantial content, model may be cached
-        model_likely_cached = False
-        if cache_dir.exists():
-            # Check for model-specific directory patterns
-            cache_contents = list(cache_dir.glob("models--*Qwen*TTS*"))
-            if cache_contents:
-                model_likely_cached = True
-                logger.info(f"Model appears to be cached in {cache_dir}")
-        
-        # If model is likely cached, skip confirmation and load directly
-        if model_likely_cached:
-            logger.info("Model cache detected, loading models without confirmation")
-            self._load_models()
-            return
-        
-        # First-time download - show confirmation
-        # Models go to system cache, not workspace
-        storage_location = str(cache_dir.parent)
-        
-        # Estimate download size
-        if model_size == "1.7B":
-            download_size = "~7 GB"
-        elif model_size == "0.6B":
-            download_size = "~3 GB"
         else:
-            download_size = "~7 GB"
-        
-        message = (
-            f"🚀 First-Time Model Download\n\n"
-            f"Qwen-semble needs to download the Qwen3-TTS AI model:\n\n"
-            f"• Model: Qwen3-TTS-{model_size}-CustomVoice\n"
-            f"• Size: {download_size}\n"
-            f"• Device: {device}\n"
-            f"• Storage: {storage_location}\n\n"
-            f"Requirements:\n"
-            f"✓ Active internet connection\n"
-            f"✓ Sufficient disk space\n\n"
-            f"This is a one-time download. The model will be cached for future use.\n\n"
-            f"Download now?"
-        )
-        
-        response = messagebox.askyesno(
-            "Model Download Required",
-            message,
-            icon='question'
-        )
-        
-        if response:
-            logger.info("User confirmed model download")
-            self._load_models()
-        else:
-            logger.info("User declined model download")
-            messagebox.showinfo(
-                "Models Not Loaded",
-                "Models were not downloaded.\n\n"
-                "The application interface is available, but TTS features will not work "
-                "until models are loaded.\n\n"
-                "You can load models later from the Settings tab by clicking "
-                "'Reload Models'."
-            )
-            # Initialize engine without loading models (for settings access)
-            self.tts_engine = TTSEngine(
-                device=self.config.get("device", "cuda:0"),
-                workspace_dir=self.workspace_mgr.get_working_directory()
-            )
-            self._init_tabs()
+            # Not first launch - check config for downloaded models
+            logger.info("Not first launch - checking config for models")
+            
+            downloaded_models = self.config.get("downloaded_models", [])
+            active_model = self.config.get("active_model", None)
+            
+            if not downloaded_models or active_model is None:
+                # No models downloaded
+                logger.info("No models found in config")
+                self._init_without_models()
+                return
+            
+            # Load the active model
+            logger.info(f"Loading active model: {active_model}")
+            self._load_models(active_model)
     
-    def _load_models(self) -> None:
-        """Load TTS models in background."""
+    def _init_without_models(self) -> None:
+        """Initialize application without loading any models."""
+        logger.info("Initializing application without models")
+        
+        # Create TTS engine instance without loading models
+        self.tts_engine = TTSEngine(
+            device=self.config.get("device", "cuda:0"),
+            workspace_dir=self.workspace_mgr.get_working_directory()
+        )
+        
+        # Initialize tabs
+        self._init_tabs()
+        
+        # Show warning banner
+        self._show_no_model_warning()
+    
+    def _show_no_model_warning(self) -> None:
+        """Show warning banner when no model is loaded."""
+        warning_frame = ctk.CTkFrame(self, fg_color="orange", height=50)
+        warning_frame.pack(fill="x", padx=5, pady=(5, 0), before=self.tabview)
+        warning_frame.pack_propagate(False)
+        
+        warning_label = ctk.CTkLabel(
+            warning_frame,
+            text="⚠️ No AI model loaded. TTS features are disabled.",
+            font=("Arial", 14, "bold"),
+            text_color="black"
+        )
+        warning_label.pack(side="left", padx=20, pady=10)
+        
+        download_btn = ctk.CTkButton(
+            warning_frame,
+            text="Download Models",
+            command=self._show_model_download_dialog,
+            fg_color="darkgreen",
+            hover_color="green",
+            font=("Arial", 12, "bold")
+        )
+        download_btn.pack(side="right", padx=20, pady=10)
+        
+        self.warning_banner = warning_frame
+    
+    def _show_model_download_dialog(self) -> None:
+        """Show model selection dialog to download models."""
+        from gui.model_selection_dialog import show_model_selection_dialog
+        
+        model_selection = show_model_selection_dialog()
+        
+        if model_selection and not model_selection["skip"]:
+            models_to_download = model_selection["models"]
+            active_model = model_selection["active_model"]
+            
+            # Update config
+            self.config.set("downloaded_models", models_to_download, save=False)
+            self.config.set("active_model", active_model, save=False)
+            self.config.set("device", model_selection["device"], save=True)
+            
+            # Remove warning banner
+            if hasattr(self, 'warning_banner'):
+                self.warning_banner.destroy()
+                delattr(self, 'warning_banner')
+            
+            # Download and load models
+            self._download_and_load_models(models_to_download, active_model)
+    
+    def _download_and_load_models(self, models_to_download: List[str], active_model: str) -> None:
+        """Download (if needed) and load selected models.
+        
+        Args:
+            models_to_download: List of model sizes to download ["1.7B", "0.6B"]
+            active_model: Which model to load as active ("1.7B" or "0.6B")
+        """
+        logger.info(f"Starting model download/load: {models_to_download}, active: {active_model}")
+        
         loading_dialog = LoadingOverlay(
             self,
-            title="Loading Models",
-            message="Loading Qwen3-TTS models, please wait..."
+            title="Downloading Models",
+            message="Preparing to download models..."
         )
         
-        def load_task():
-            """Background task to load models."""
+        def download_task():
+            """Background task to download and load models."""
             try:
-                logger.info("Starting model loading task...")
                 # Initialize TTS engine
                 device = self.config.get("device", "cuda:0")
-                use_flash_attention = self.config.get("use_flash_attention", True)
-                model_size = self.config.get("model_size", "1.7B")
+                use_flash_attention = self.config.get("use_flash_attention", False)
                 
-                logger.info(f"Initializing TTS engine: device={device}, model_size={model_size}, flash_attn={use_flash_attention}")
-                logger.debug("Creating TTSEngine instance...")
+                logger.info(f"Initializing TTS engine: device={device}")
                 
                 self.tts_engine = TTSEngine(
                     device=device,
@@ -275,57 +300,147 @@ class QwenTTSApp(ctk.CTk):
                     use_flash_attention=use_flash_attention,
                     workspace_dir=self.workspace_mgr.get_working_directory()
                 )
-                logger.debug("TTSEngine instance created")
                 
-                # Load primary model (CustomVoice)
-                logger.info("Loading CustomVoice model...")
-                loading_dialog.update_progress(30, "Loading CustomVoice model...")
-                self.tts_engine.load_custom_voice_model(
-                    model_size=model_size,
-                    progress_callback=lambda p, m: loading_dialog.update_progress(30 + p * 0.7, m)
-                )
+                total_models = len(models_to_download)
                 
-                logger.info("Model loading completed successfully")
-                loading_dialog.update_progress(100, "Models loaded successfully!")
+                # Download each model
+                for idx, model_size in enumerate(models_to_download, 1):
+                    logger.info(f"Downloading model {idx}/{total_models}: {model_size}")
+                    loading_dialog.update_progress(
+                        0,
+                        f"Downloading model {idx}/{total_models}: Qwen3-TTS-{model_size}..."
+                    )
+                    
+                    # Load the model (will download if needed)
+                    self.tts_engine.load_custom_voice_model(
+                        model_size=model_size,
+                        progress_callback=lambda p, m: loading_dialog.update_progress(
+                            ((idx - 1) / total_models + p / total_models) * 100,
+                            f"Model {idx}/{total_models}: {m}"
+                        )
+                    )
+                    
+                    # Unload if not the active model (save memory)
+                    if model_size != active_model:
+                        logger.info(f"Unloading {model_size} (not active model)")
+                        self.tts_engine.unload_all_models()
+                
+                # Load active model if it's not the last one downloaded
+                if active_model != models_to_download[-1]:
+                    logger.info(f"Loading active model: {active_model}")
+                    loading_dialog.update_progress(95, f"Loading active model: {active_model}...")
+                    self.tts_engine.load_custom_voice_model(model_size=active_model)
+                
+                loading_dialog.update_progress(100, "Models ready!")
+                logger.info("All models downloaded successfully")
                 
                 return True
                 
             except Exception as e:
-                logger.error(f"Failed to load models: {e}")
+                logger.error(f"Failed to download/load models: {e}", exc_info=True)
+                return e
+        
+        def on_complete(result):
+            """Called when download completes."""
+            loading_dialog.close()
+            
+            if isinstance(result, Exception):
+                logger.error(f"Model download failed: {result}")
+                messagebox.showerror(
+                    "Download Failed",
+                    f"Failed to download models:\n\n{str(result)}\n\n"
+                    "Check your internet connection and try again."
+                )
+                self._init_without_models()
+            else:
+                logger.info("Models downloaded and loaded successfully")
+                # Initialize tabs if not already done
+                if not self.voice_creation_tab:
+                    self._init_tabs()
+        
+        def on_error(error):
+            """Called if download fails."""
+            loading_dialog.close()
+            messagebox.showerror("Error", f"Failed to download models: {error}")
+            self._init_without_models()
+        
+        # Run in background thread
+        run_in_thread(
+            self,
+            download_task,
+            on_success=on_complete,
+            on_error=on_error
+        )
+    
+    def _load_models(self, model_size: str) -> None:
+        """Load TTS model in background.
+        
+        Args:
+            model_size: Model size to load ("1.7B" or "0.6B")
+        """
+        loading_dialog = LoadingOverlay(
+            self,
+            title="Loading Model",
+            message=f"Loading Qwen3-TTS-{model_size} model..."
+        )
+        
+        def load_task():
+            """Background task to load model."""
+            try:
+                logger.info(f"Starting model loading: {model_size}")
+                
+                # Initialize TTS engine if not already done
+                if not self.tts_engine:
+                    device = self.config.get("device", "cuda:0")
+                    use_flash_attention = self.config.get("use_flash_attention", False)
+                    
+                    self.tts_engine = TTSEngine(
+                        device=device,
+                        dtype="bfloat16",
+                        use_flash_attention=use_flash_attention,
+                        workspace_dir=self.workspace_mgr.get_working_directory()
+                    )
+                
+                # Load the model
+                self.tts_engine.load_custom_voice_model(
+                    model_size=model_size,
+                    progress_callback=lambda p, m: loading_dialog.update_progress(p * 100, m)
+                )
+                
+                logger.info(f"Model {model_size} loaded successfully")
+                loading_dialog.update_progress(100, "Model loaded!")
+                
+                return True
+                
+            except Exception as e:
+                logger.error(f"Failed to load model: {e}", exc_info=True)
                 return e
         
         def on_complete(result):
             """Called when model loading completes."""
-            logger.debug("Model loading task completed, closing loading dialog")
             loading_dialog.close()
             
             if isinstance(result, Exception):
-                logger.error(f"Model loading failed with error: {result}")
+                logger.error(f"Model loading failed: {result}")
                 messagebox.showerror(
-                    "Model Loading Failed",
-                    f"Failed to load TTS models:\n\n{str(result)}\n\n"
-                    "The application will continue, but TTS features will not work.\n"
-                    "Check Settings to configure device and model."
+                    "Loading Failed",
+                    f"Failed to load model:\n\n{str(result)}\n\n"
+                    "Continuing without models."
                 )
-                # Initialize engine in CPU mode as fallback
-                logger.info("Initializing fallback TTS engine in CPU mode")
-                self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_mgr.get_working_directory())
+                self._init_without_models()
             else:
-                logger.info("Model loading successful, proceeding with tab initialization")
-            
-            # Initialize tabs
-            logger.debug("Starting tab initialization...")
-            self._init_tabs()
+                logger.info("Model loaded successfully")
+                # Initialize tabs if not already done
+                if not self.voice_creation_tab:
+                    self._init_tabs()
         
         def on_error(error):
-            """Called if model loading fails."""
+            """Called if loading fails."""
             loading_dialog.close()
-            messagebox.showerror("Error", f"Failed to load models: {error}")
-            # Initialize with CPU fallback
-            self.tts_engine = TTSEngine(device="cpu", workspace_dir=self.workspace_mgr.get_working_directory())
-            self._init_tabs()
+            messagebox.showerror("Error", f"Failed to load model: {error}")
+            self._init_without_models()
         
-        # Run loading in background thread
+        # Run in background thread
         run_in_thread(
             self,
             load_task,
@@ -335,20 +450,13 @@ class QwenTTSApp(ctk.CTk):
     
     def _reload_models(self) -> None:
         """Reload models with new settings."""
-        model_size = self.config.get("model_size", "1.7B")
+        active_model = self.config.get("active_model", "1.7B")
         
         message = (
             "This will unload current models and reload with new settings.\n"
             "Any unsaved work will be lost.\n\n"
+            "Continue?"
         )
-        
-        # Check if model size changed - may require download
-        if self.tts_engine and hasattr(self.tts_engine, 'custom_voice_model'):
-            message += (
-                "Note: If you changed the model size, a new download may be required.\n\n"
-            )
-        
-        message += "Continue?"
         
         response = messagebox.askyesno(
             "Reload Models",
@@ -360,8 +468,12 @@ class QwenTTSApp(ctk.CTk):
             if self.tts_engine:
                 self.tts_engine.unload_all_models()
             
-            # Reload (this will check cache and load or download as needed)
-            self._load_models()
+            # Reload the active model
+            if active_model:
+                self._load_models(active_model)
+            else:
+                # No model configured, show download dialog
+                self._show_model_download_dialog()
     
     def _open_workspace_folder(self) -> None:
         """Open working directory in file explorer."""
@@ -411,11 +523,12 @@ class QwenTTSApp(ctk.CTk):
         self.destroy()
 
 
-def run(workspace_mgr: 'WorkspaceManager'):
+def run(workspace_mgr: 'WorkspaceManager', model_selection: Optional[Dict] = None):
     """Run the application.
     
     Args:
         workspace_mgr: WorkspaceManager instance
+        model_selection: Optional dict from model selection dialog (for first launch)
     """
-    app = QwenTTSApp(workspace_mgr)
+    app = QwenTTSApp(workspace_mgr, model_selection)
     app.mainloop()
