@@ -3,6 +3,7 @@
 import customtkinter as ctk
 from tkinter import messagebox
 import os
+import webbrowser
 from pathlib import Path
 from typing import Optional, Dict, List, TYPE_CHECKING
 
@@ -21,6 +22,149 @@ from gui.tab_narration import NarrationTab
 from gui.tab_settings import SettingsTab
 from gui.tab_saved_voices import SavedVoicesTab
 from gui.components import LoadingOverlay
+
+
+class AboutDialog(ctk.CTkToplevel):
+    """Elegant About dialog window."""
+    
+    def __init__(self, parent):
+        """Initialize About dialog.
+        
+        Args:
+            parent: Parent window
+        """
+        super().__init__(parent)
+        
+        self.title("About Qwen-semble")
+        self.geometry("600x650")
+        self.resizable(False, False)
+        
+        # Center window on parent
+        self.transient(parent)
+        self.grab_set()
+        
+        # Create UI
+        self._create_ui()
+        
+        # Center on screen
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (600 // 2)
+        y = (self.winfo_screenheight() // 2) - (650 // 2)
+        self.geometry(f"600x650+{x}+{y}")
+    
+    def _create_ui(self) -> None:
+        """Create dialog UI."""
+        # Main container
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Header section with app name
+        header_frame = ctk.CTkFrame(main_frame, fg_color=("gray85", "gray20"))
+        header_frame.pack(fill="x", pady=(0, 15))
+        
+        title_label = ctk.CTkLabel(
+            header_frame,
+            text="Qwen-semble",
+            font=("Arial", 32, "bold")
+        )
+        title_label.pack(pady=(15, 5))
+        
+        subtitle_label = ctk.CTkLabel(
+            header_frame,
+            text="TTS Voice Studio",
+            font=("Arial", 16),
+            text_color="gray"
+        )
+        subtitle_label.pack(pady=(0, 15))
+        
+        # Version
+        version_label = ctk.CTkLabel(
+            main_frame,
+            text="Version 1.0.0",
+            font=("Arial", 12, "bold")
+        )
+        version_label.pack(pady=(0, 10))
+        
+        # Description
+        desc_label = ctk.CTkLabel(
+            main_frame,
+            text="A powerful voice cloning and narration application\\npowered by Qwen3-TTS models.",
+            font=("Arial", 11),
+            justify="center"
+        )
+        desc_label.pack(pady=(0, 20))
+        
+        # Features section
+        features_frame = ctk.CTkFrame(main_frame)
+        features_frame.pack(fill="x", pady=(0, 15))
+        
+        features_title = ctk.CTkLabel(
+            features_frame,
+            text="Features",
+            font=("Arial", 14, "bold")
+        )
+        features_title.pack(pady=(10, 8))
+        
+        features_text = (
+            "🎙️  Clone voices from audio samples\\n"
+            "🎨  Design custom voices from descriptions\\n"
+            "📖  Multi-voice transcript narration\\n"
+            "💾  Voice library management\\n"
+            "🚀  GPU acceleration with CUDA support\\n"
+            "🌍  Multilingual (11 languages)\\n"
+            "💻  100% local processing"
+        )
+        
+        features_label = ctk.CTkLabel(
+            features_frame,
+            text=features_text,
+            font=("Arial", 11),
+            justify="left"
+        )
+        features_label.pack(pady=(0, 10), padx=20)
+        
+        # GitHub link section
+        github_frame = ctk.CTkFrame(main_frame, fg_color=("gray90", "gray15"))
+        github_frame.pack(fill="x", pady=(0, 15))
+        
+        github_label = ctk.CTkLabel(
+            github_frame,
+            text="GitHub Repository",
+            font=("Arial", 12, "bold")
+        )
+        github_label.pack(pady=(10, 5))
+        
+        github_url = "https://github.com/AdamMoses-GitHub/Qwen-semble"
+        github_link = ctk.CTkButton(
+            github_frame,
+            text=github_url,
+            font=("Arial", 10),
+            fg_color="transparent",
+            hover_color=("gray80", "gray25"),
+            text_color=("blue", "lightblue"),
+            cursor="hand2",
+            command=lambda: webbrowser.open(github_url)
+        )
+        github_link.pack(pady=(0, 10))
+        
+        # Copyright
+        copyright_label = ctk.CTkLabel(
+            main_frame,
+            text="© 2026 - Licensed under MIT",
+            font=("Arial", 10),
+            text_color="gray"
+        )
+        copyright_label.pack(pady=(5, 15))
+        
+        # Close button
+        close_btn = ctk.CTkButton(
+            main_frame,
+            text="Close",
+            command=self.destroy,
+            width=120,
+            height=32
+        )
+        close_btn.pack(pady=(0, 0))
 
 
 class QwenTTSApp(ctk.CTk):
@@ -491,19 +635,7 @@ class QwenTTSApp(ctk.CTk):
     
     def _show_about(self) -> None:
         """Show about dialog."""
-        about_text = (
-            "Qwen-semble - TTS Voice Studio\n\n"
-            "Version 1.0.0\n\n"
-            "A powerful voice cloning and narration application\n"
-            "powered by Qwen3-TTS models.\n\n"
-            "Features:\n"
-            "• Clone voices from audio samples\n"
-            "• Design custom voices from descriptions\n"
-            "• Multi-voice transcript narration\n"
-            "• Voice library management\n\n"
-            "© 2026 - Licensed under MIT"
-        )
-        messagebox.showinfo("About", about_text)
+        AboutDialog(self)
     
     def _on_closing(self) -> None:
         """Handle window close event."""
