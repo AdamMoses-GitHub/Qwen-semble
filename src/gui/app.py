@@ -80,7 +80,7 @@ class AboutDialog(ctk.CTkToplevel):
         # Version
         version_label = ctk.CTkLabel(
             main_frame,
-            text="Version 1.0.0",
+            text="Version 1.0.2",
             font=("Arial", 12, "bold")
         )
         version_label.pack(pady=(0, 10))

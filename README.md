@@ -2,7 +2,7 @@
 
 *Because manually recording audiobooks is like writing code in assembly – technically possible, but why would you?*
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.0.2-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/python-3.12+-brightgreen)
 
