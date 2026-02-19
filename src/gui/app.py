@@ -304,7 +304,8 @@ class QwenTTSApp(ctk.CTk):
                 self.tts_engine,
                 self.config,
                 self._reload_models,
-                workspace_mgr=self.workspace_mgr
+                workspace_mgr=self.workspace_mgr,
+                download_callback=self._download_and_load_models
             )
             
             logger.info("Tabs initialized")
@@ -501,6 +502,9 @@ class QwenTTSApp(ctk.CTk):
                 # Initialize tabs if not already done
                 if not self.voice_creation_tab:
                     self._init_tabs()
+                # Refresh settings tab UI if it exists
+                elif self.settings_tab and hasattr(self.settings_tab, '_refresh_model_selection_ui'):
+                    self.settings_tab._refresh_model_selection_ui()
         
         def on_error(error):
             """Called if download fails."""
@@ -577,6 +581,9 @@ class QwenTTSApp(ctk.CTk):
                 # Initialize tabs if not already done
                 if not self.voice_creation_tab:
                     self._init_tabs()
+                # Refresh settings tab UI if it exists
+                elif self.settings_tab and hasattr(self.settings_tab, '_refresh_model_selection_ui'):
+                    self.settings_tab._refresh_model_selection_ui()
         
         def on_error(error):
             """Called if loading fails."""

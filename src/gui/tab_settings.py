@@ -16,13 +16,20 @@ if TYPE_CHECKING:
 class SettingsTab(ctk.CTkFrame):
     """Application settings tab."""
     
-    def __init__(self, parent, tts_engine, config, reload_callback, workspace_mgr: Optional['WorkspaceManager'] = None):
+    def __init__(self, parent, tts_engine, config, reload_callback, workspace_mgr: Optional['WorkspaceManager'] = None, download_callback=None):
         super().__init__(parent)
         
         self.tts_engine = tts_engine
         self.config = config
         self.reload_callback = reload_callback
         self.workspace_mgr = workspace_mgr
+        self.download_callback = download_callback
+        
+        # Track UI elements for dynamic updates
+        self.size_1_7b = None
+        self.size_0_6b = None
+        self.help_banner = None
+        self.model_section_parent = None
         
         self._create_ui()
         
@@ -58,8 +65,16 @@ class SettingsTab(ctk.CTkFrame):
         section = ctk.CTkFrame(parent)
         section.pack(fill="x", pady=10)
         
+        # Store reference for refreshing
+        self.model_section_parent = section
+        
         title = ctk.CTkLabel(section, text="Model Configuration", font=("Arial", 14, "bold"))
         title.pack(pady=10)
+        
+        # Check if no models installed and show help text
+        downloaded_models = self.config.get("downloaded_models", [])
+        if not downloaded_models:
+            self._create_no_models_help(section)
         
         # Device selection
         device_frame = ctk.CTkFrame(section)
@@ -86,29 +101,70 @@ class SettingsTab(ctk.CTkFrame):
         
         self.device_combo.pack(side="left", padx=5)
         
-        # Model size
+        # Model size with installation status
         size_frame = ctk.CTkFrame(section)
         size_frame.pack(fill="x", padx=10, pady=5)
         
         size_label = ctk.CTkLabel(size_frame, text="Model Size:", width=150)
         size_label.pack(side="left", padx=5)
         
-        self.model_size_var = ctk.StringVar(value=self.config.get("model_size", "1.7B"))
-        size_1_7b = ctk.CTkRadioButton(
-            size_frame,
-            text="1.7B (higher quality, ~7GB VRAM)",
-            variable=self.model_size_var,
-            value="1.7B"
-        )
-        size_1_7b.pack(side="left", padx=10)
+        # Get downloaded models and active model
+        downloaded_models = self.config.get("downloaded_models", [])
+        active_model = self.config.get("active_model", None)
         
-        size_0_6b = ctk.CTkRadioButton(
+        # Ensure model_size_var matches active_model if available
+        current_model = active_model if active_model in downloaded_models else self.config.get("model_size", "1.7B")
+        self.model_size_var = ctk.StringVar(value=current_model)
+        
+        # 1.7B Model
+        is_1_7b_installed = "1.7B" in downloaded_models
+        model_1_7b_text = "1.7B (higher quality, ~7GB VRAM)"
+        if is_1_7b_installed:
+            model_1_7b_text += " ✓ Installed"
+            if active_model == "1.7B":
+                model_1_7b_text += " [Active]"
+        else:
+            model_1_7b_text += " ⚠ Not Installed"
+        
+        self.size_1_7b = ctk.CTkRadioButton(
             size_frame,
-            text="0.6B (faster, ~2.5GB VRAM)",
+            text=model_1_7b_text,
             variable=self.model_size_var,
-            value="0.6B"
+            value="1.7B",
+            state="normal" if is_1_7b_installed else "disabled"
         )
-        size_0_6b.pack(side="left", padx=10)
+        self.size_1_7b.pack(side="left", padx=10)
+        
+        # 0.6B Model
+        is_0_6b_installed = "0.6B" in downloaded_models
+        model_0_6b_text = "0.6B (faster, ~2.5GB VRAM)"
+        if is_0_6b_installed:
+            model_0_6b_text += " ✓ Installed"
+            if active_model == "0.6B":
+                model_0_6b_text += " [Active]"
+        else:
+            model_0_6b_text += " ⚠ Not Installed"
+        
+        self.size_0_6b = ctk.CTkRadioButton(
+            size_frame,
+            text=model_0_6b_text,
+            variable=self.model_size_var,
+            value="0.6B",
+            state="normal" if is_0_6b_installed else "disabled"
+        )
+        self.size_0_6b.pack(side="left", padx=10)
+        
+        # Manage Models button
+        manage_models_btn = ctk.CTkButton(
+            size_frame,
+            text="📥 Manage Models",
+            command=self._manage_models,
+            width=140,
+            height=32,
+            fg_color="#1f6aa5",
+            hover_color="#144870"
+        )
+        manage_models_btn.pack(side="left", padx=20)
         
         # Active Model Switcher (if multiple models downloaded)
         self._create_active_model_switcher(section)
@@ -157,6 +213,104 @@ class SettingsTab(ctk.CTkFrame):
             font=("Arial", 10)
         )
         info_label.pack(side="left", padx=10)
+    
+    def _create_no_models_help(self, parent) -> None:
+        """Create help banner when no models are installed."""
+        help_frame = ctk.CTkFrame(parent, fg_color="#f59e0b", corner_radius=8)
+        help_frame.pack(fill="x", padx=10, pady=10)
+        
+        # Store reference for cleanup
+        self.help_banner = help_frame
+        
+        icon_label = ctk.CTkLabel(
+            help_frame,
+            text="⚠️",
+            font=("Arial", 24),
+            text_color="black"
+        )
+        icon_label.pack(side="left", padx=15, pady=10)
+        
+        text_frame = ctk.CTkFrame(help_frame, fg_color="transparent")
+        text_frame.pack(side="left", fill="x", expand=True, pady=10)
+        
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text="No AI Models Installed",
+            font=("Arial", 14, "bold"),
+            text_color="black",
+            anchor="w"
+        )
+        title_label.pack(anchor="w", padx=5)
+        
+        subtitle_label = ctk.CTkLabel(
+            text_frame,
+            text="Click '📥 Manage Models' button below to download models for voice synthesis",
+            font=("Arial", 11),
+            text_color="black",
+            anchor="w"
+        )
+        subtitle_label.pack(anchor="w", padx=5)
+    
+    def _refresh_model_selection_ui(self) -> None:
+        """Refresh the model selection UI to reflect current installation status."""
+        if not self.model_section_parent:
+            return
+        
+        logger.debug("Refreshing model selection UI")
+        
+        # Get current state
+        downloaded_models = self.config.get("downloaded_models", [])
+        active_model = self.config.get("active_model", None)
+        
+        # Update help banner visibility
+        if not downloaded_models:
+            # Show help banner if not already visible
+            if not self.help_banner or not self.help_banner.winfo_exists():
+                self._create_no_models_help(self.model_section_parent)
+        else:
+            # Remove help banner if exists
+            if self.help_banner and self.help_banner.winfo_exists():
+                self.help_banner.destroy()
+                self.help_banner = None
+        
+        # Update 1.7B radio button
+        if self.size_1_7b and self.size_1_7b.winfo_exists():
+            is_1_7b_installed = "1.7B" in downloaded_models
+            model_1_7b_text = "1.7B (higher quality, ~7GB VRAM)"
+            if is_1_7b_installed:
+                model_1_7b_text += " ✓ Installed"
+                if active_model == "1.7B":
+                    model_1_7b_text += " [Active]"
+            else:
+                model_1_7b_text += " ⚠ Not Installed"
+            
+            self.size_1_7b.configure(
+                text=model_1_7b_text,
+                state="normal" if is_1_7b_installed else "disabled"
+            )
+        
+        # Update 0.6B radio button
+        if self.size_0_6b and self.size_0_6b.winfo_exists():
+            is_0_6b_installed = "0.6B" in downloaded_models
+            model_0_6b_text = "0.6B (faster, ~2.5GB VRAM)"
+            if is_0_6b_installed:
+                model_0_6b_text += " ✓ Installed"
+                if active_model == "0.6B":
+                    model_0_6b_text += " [Active]"
+            else:
+                model_0_6b_text += " ⚠ Not Installed"
+            
+            self.size_0_6b.configure(
+                text=model_0_6b_text,
+                state="normal" if is_0_6b_installed else "disabled"
+            )
+        
+        # Update model_size_var to match active model if needed
+        current_selection = self.model_size_var.get()
+        if current_selection not in downloaded_models and active_model:
+            self.model_size_var.set(active_model)
+        
+        logger.debug(f"Model selection UI refreshed: {downloaded_models}, active: {active_model}")
     
     def _on_active_model_changed(self, selected_model: str) -> None:
         """Handle active model change.
@@ -634,9 +788,18 @@ class SettingsTab(ctk.CTkFrame):
             if rep_penalty < 0.8 or rep_penalty > 1.5:
                 raise ValueError("Repetition penalty must be between 0.8 and 1.5")
             
+            # Validate model selection (must be installed)
+            selected_model = self.model_size_var.get()
+            downloaded_models = self.config.get("downloaded_models", [])
+            if selected_model not in downloaded_models:
+                raise ValueError(
+                    f"Cannot select {selected_model} model - it is not installed.\n"
+                    f"Use 'Manage Models' button to download it first."
+                )
+            
             # Save settings
             self.config.set("device", device_id, save=False)
-            self.config.set("model_size", self.model_size_var.get(), save=False)
+            self.config.set("model_size", selected_model, save=False)
             self.config.set("use_flash_attention", self.flash_var.get(), save=False)
             self.config.set("output_dir", self.output_entry.get(), save=False)
             self.config.set("generation_params.max_new_tokens", max_tokens, save=False)
@@ -655,6 +818,78 @@ class SettingsTab(ctk.CTkFrame):
         except Exception as e:
             logger.error(f"Failed to save settings: {e}")
             messagebox.showerror("Error", f"Failed to save settings: {e}")
+    
+    def _manage_models(self) -> None:
+        """Open model management dialog to download/manage models."""
+        from gui.model_selection_dialog import show_model_selection_dialog
+        
+        logger.info("User opened model management dialog")
+        
+        # Backup current config in case of failure
+        old_downloaded_models = self.config.get("downloaded_models", [])
+        old_active_model = self.config.get("active_model", None)
+        old_device = self.config.get("device", "cuda:0")
+        
+        model_selection = show_model_selection_dialog()
+        
+        # User cancelled dialog
+        if not model_selection:
+            logger.info("User cancelled model management dialog")
+            return
+        
+        # User chose to skip
+        if model_selection["skip"]:
+            logger.info("User chose to skip model management")
+            return
+        
+        models_to_download = model_selection["models"]
+        new_active_model = model_selection["active_model"]
+        new_device = model_selection["device"]
+        
+        logger.info(f"Model selection: {models_to_download}, active: {new_active_model}")
+        
+        # Check if download callback is available
+        if not self.download_callback:
+            logger.error("Download callback not available")
+            messagebox.showerror(
+                "Error",
+                "Model download functionality is not available.\n"
+                "Please restart the application."
+            )
+            return
+        
+        # Update config first
+        self.config.set("downloaded_models", models_to_download, save=False)
+        self.config.set("active_model", new_active_model, save=False)
+        self.config.set("device", new_device, save=True)
+        
+        # Trigger download through callback (this will handle the actual download)
+        try:
+            logger.info("Triggering model download...")
+            self.download_callback(models_to_download, new_active_model)
+            
+            # Refresh UI to show new status
+            self.after(100, self._refresh_model_selection_ui)
+            
+            logger.info("Model download initiated successfully")
+            
+        except Exception as e:
+            logger.error(f"Model download failed: {e}", exc_info=True)
+            
+            # Revert config on failure
+            logger.warning("Reverting config to previous state")
+            self.config.set("downloaded_models", old_downloaded_models, save=False)
+            self.config.set("active_model", old_active_model, save=False)
+            self.config.set("device", old_device, save=True)
+            
+            # Refresh UI to show reverted status
+            self._refresh_model_selection_ui()
+            
+            messagebox.showerror(
+                "Download Failed",
+                f"Failed to download models:\n\n{str(e)}\n\n"
+                "Configuration has been reverted to previous state."
+            )
     
     def _reload_models(self) -> None:
         """Trigger model reload."""
