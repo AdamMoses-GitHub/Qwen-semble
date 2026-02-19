@@ -240,10 +240,7 @@ class QwenTTSApp(ctk.CTk):
         )
         open_workspace_btn.pack(side="left", padx=5)
         
-        # Help menu buttons
-        help_label = ctk.CTkLabel(menu_frame, text="Help:", font=("Arial", 12, "bold"))
-        help_label.pack(side="right", padx=20)
-        
+        # About button
         about_btn = ctk.CTkButton(
             menu_frame,
             text="About",
