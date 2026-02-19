@@ -776,7 +776,7 @@ class VoiceCreationTab(ctk.CTkFrame):
             logger.info("Loading Base model...")
             self.model_progress_label.configure(text="Loading Base model...")
             try:
-                model_size = self.config.get("model_size", "1.7B")
+                model_size = self.config.get("active_model", "1.7B")
                 self.tts_engine.load_base_model(model_size)
             except Exception as e:
                 logger.error(f"Failed to load Base model: {e}")
@@ -879,7 +879,7 @@ class VoiceCreationTab(ctk.CTkFrame):
             logger.info("Loading VoiceDesign model...")
             self.model_progress_label.configure(text="Loading VoiceDesign model...")
             try:
-                model_size = self.config.get("model_size", "1.7B")
+                model_size = self.config.get("active_model", "1.7B")
                 self.tts_engine.load_voice_design_model(model_size)
             except Exception as e:
                 logger.error(f"Failed to load VoiceDesign model: {e}")
@@ -1145,7 +1145,8 @@ class VoiceCreationTab(ctk.CTkFrame):
                 tags=tags,
                 language="Auto",
                 template_test_audios=self.template_test_audios,
-                custom_test_audios=self.custom_test_audios
+                custom_test_audios=self.custom_test_audios,
+                model_size=self.config.get("active_model", "1.7B")
             )
             
             messagebox.showinfo("Success", f"Voice '{name}' saved to library!")
@@ -1196,7 +1197,8 @@ class VoiceCreationTab(ctk.CTkFrame):
                 tags=tags,
                 language=language,
                 template_test_audios=self.template_test_audios,
-                custom_test_audios=self.custom_test_audios
+                custom_test_audios=self.custom_test_audios,
+                model_size=self.config.get("active_model", "1.7B")
             )
             
             messagebox.showinfo("Success", f"Voice '{name}' saved to library!")

@@ -106,6 +106,7 @@ class VoiceLibrary:
             content.append(f"Type:           {voice_data['type'].capitalize()}")
             content.append(f"Created:        {formatted_date}")
             content.append(f"Language:       {voice_data.get('language', 'Auto')}")
+            content.append(f"Model Size:     {voice_data.get('model_size', 'Unknown')}")
             
             # Tags
             if voice_data.get('tags'):
@@ -204,7 +205,8 @@ class VoiceLibrary:
         tags: Optional[List[str]] = None,
         language: str = "Auto",
         template_test_audios: Optional[Dict[int, tuple]] = None,
-        custom_test_audios: Optional[List[Dict]] = None
+        custom_test_audios: Optional[List[Dict]] = None,
+        model_size: str = "1.7B"
     ) -> str:
         """Save a cloned voice to library.
         
@@ -217,6 +219,7 @@ class VoiceLibrary:
             language: Voice language
             template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
             custom_test_audios: List of dicts with {text, audio_path, audio, sr} for custom tests
+            model_size: Model size used to create this voice ("1.7B" or "0.6B")
             
         Returns:
             Voice ID
@@ -286,6 +289,7 @@ class VoiceLibrary:
                 "ref_text": ref_text,
                 "prompt_file": str(prompt_dest),
                 "language": language,
+                "model_size": model_size,
                 "template_tests": template_test_paths,
                 "custom_tests": custom_test_data,
                 "usage_count": 0,
@@ -314,7 +318,8 @@ class VoiceLibrary:
         tags: Optional[List[str]] = None,
         language: str = "Auto",
         template_test_audios: Optional[Dict[int, tuple]] = None,
-        custom_test_audios: Optional[List[Dict]] = None
+        custom_test_audios: Optional[List[Dict]] = None,
+        model_size: str = "1.7B"
     ) -> str:
         """Save a designed voice to library.
         
@@ -326,6 +331,7 @@ class VoiceLibrary:
             language: Voice language
             template_test_audios: Dict of {index: (audio_array, sample_rate)} for template tests
             custom_test_audios: List of dicts with {text, audio_path, audio, sr} for custom tests
+            model_size: Model size used to create this voice ("1.7B" or "0.6B")
             
         Returns:
             Voice ID
@@ -388,6 +394,7 @@ class VoiceLibrary:
                 "description": description,
                 "sample_audio": str(audio_dest),
                 "language": language,
+                "model_size": model_size,
                 "template_tests": template_test_paths,
                 "custom_tests": custom_test_data,
                 "usage_count": 0,

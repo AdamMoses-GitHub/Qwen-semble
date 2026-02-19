@@ -365,7 +365,7 @@ class VoiceCloneTab(ctk.CTkFrame):
             logger.info("Loading Base model...")
             self.model_progress_label.configure(text="Loading Base model...")
             try:
-                model_size = self.config.get("model_size", "1.7B")
+                model_size = self.config.get("active_model", "1.7B")
                 self.tts_engine.load_base_model(model_size)
             except Exception as e:
                 logger.error(f"Failed to load Base model: {e}")
@@ -534,7 +534,8 @@ class VoiceCloneTab(ctk.CTkFrame):
                 voice_clone_prompt=self.current_voice_prompt,
                 tags=tags,
                 language="Auto",
-                template_test_audios=self.template_test_audios
+                template_test_audios=self.template_test_audios,
+                model_size=self.config.get("active_model", "1.7B")
             )
             
             messagebox.showinfo("Success", f"Voice '{name}' saved to library!")

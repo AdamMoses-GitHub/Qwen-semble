@@ -326,7 +326,7 @@ class VoiceDesignTab(ctk.CTkFrame):
             logger.info("Loading VoiceDesign model...")
             self.model_progress_label.configure(text="Loading VoiceDesign model...")
             try:
-                model_size = self.config.get("model_size", "1.7B")
+                model_size = self.config.get("active_model", "1.7B")
                 self.tts_engine.load_voice_design_model(model_size)
             except Exception as e:
                 logger.error(f"Failed to load VoiceDesign model: {e}")
@@ -518,7 +518,8 @@ class VoiceDesignTab(ctk.CTkFrame):
                 sample_audio_path=temp_path,
                 tags=tags,
                 language=language,
-                template_test_audios=self.template_test_audios
+                template_test_audios=self.template_test_audios,
+                model_size=self.config.get("active_model", "1.7B")
             )
             
             messagebox.showinfo("Success", f"Voice '{name}' saved to library!")

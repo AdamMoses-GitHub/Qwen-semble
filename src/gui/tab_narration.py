@@ -1003,7 +1003,7 @@ class NarrationTab(ctk.CTkFrame):
                             # Ensure Base model is loaded
                             if self.tts_engine.base_model is None:
                                 logger.info("Base model not loaded, loading now...")
-                                model_size = self.config.get("model_size", "1.7B")
+                                model_size = self.config.get("active_model", "1.7B")
                                 self.tts_engine.load_base_model(model_size)
                             
                             # Load voice clone prompt
@@ -1031,7 +1031,7 @@ class NarrationTab(ctk.CTkFrame):
                             # Ensure VoiceDesign model is loaded
                             if self.tts_engine.voice_design_model is None:
                                 logger.info("VoiceDesign model not loaded, loading now...")
-                                model_size = self.config.get("model_size", "1.7B")
+                                model_size = self.config.get("active_model", "1.7B")
                                 self.tts_engine.load_voice_design_model(model_size)
                             
                             # Generate with voice design

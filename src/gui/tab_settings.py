@@ -26,10 +26,12 @@ class SettingsTab(ctk.CTkFrame):
         self.download_callback = download_callback
         
         # Track UI elements for dynamic updates
-        self.size_1_7b = None
-        self.size_0_6b = None
         self.help_banner = None
         self.model_section_parent = None
+        self.model_status_frame = None
+        self.active_model_frame = None
+        self.active_model_combo = None
+        self.active_model_var = None
         
         self._create_ui()
         
@@ -101,62 +103,29 @@ class SettingsTab(ctk.CTkFrame):
         
         self.device_combo.pack(side="left", padx=5)
         
-        # Model size with installation status
-        size_frame = ctk.CTkFrame(section)
-        size_frame.pack(fill="x", padx=10, pady=5)
+        # Installed Models Status Display
+        status_frame = ctk.CTkFrame(section)
+        status_frame.pack(fill="x", padx=10, pady=10)
         
-        size_label = ctk.CTkLabel(size_frame, text="Model Size:", width=150)
-        size_label.pack(side="left", padx=5)
+        status_label = ctk.CTkLabel(status_frame, text="Installed Models:", width=150, anchor="w")
+        status_label.pack(side="left", padx=5, anchor="w")
         
-        # Get downloaded models and active model
+        # Get downloaded models
         downloaded_models = self.config.get("downloaded_models", [])
-        active_model = self.config.get("active_model", None)
         
-        # Ensure model_size_var matches active_model if available
-        current_model = active_model if active_model in downloaded_models else self.config.get("model_size", "1.7B")
-        self.model_size_var = ctk.StringVar(value=current_model)
+        # Status text frame
+        status_text_frame = ctk.CTkFrame(status_frame, fg_color="transparent")
+        status_text_frame.pack(side="left", fill="x", expand=True, padx=10)
         
-        # 1.7B Model
-        is_1_7b_installed = "1.7B" in downloaded_models
-        model_1_7b_text = "1.7B (higher quality, ~7GB VRAM)"
-        if is_1_7b_installed:
-            model_1_7b_text += " ✓ Installed"
-            if active_model == "1.7B":
-                model_1_7b_text += " [Active]"
-        else:
-            model_1_7b_text += " ⚠ Not Installed"
+        # Store reference for refresh
+        self.model_status_frame = status_text_frame
         
-        self.size_1_7b = ctk.CTkRadioButton(
-            size_frame,
-            text=model_1_7b_text,
-            variable=self.model_size_var,
-            value="1.7B",
-            state="normal" if is_1_7b_installed else "disabled"
-        )
-        self.size_1_7b.pack(side="left", padx=10)
-        
-        # 0.6B Model
-        is_0_6b_installed = "0.6B" in downloaded_models
-        model_0_6b_text = "0.6B (faster, ~2.5GB VRAM)"
-        if is_0_6b_installed:
-            model_0_6b_text += " ✓ Installed"
-            if active_model == "0.6B":
-                model_0_6b_text += " [Active]"
-        else:
-            model_0_6b_text += " ⚠ Not Installed"
-        
-        self.size_0_6b = ctk.CTkRadioButton(
-            size_frame,
-            text=model_0_6b_text,
-            variable=self.model_size_var,
-            value="0.6B",
-            state="normal" if is_0_6b_installed else "disabled"
-        )
-        self.size_0_6b.pack(side="left", padx=10)
+        # Create status labels
+        self._create_model_status_labels(status_text_frame, downloaded_models)
         
         # Manage Models button
         manage_models_btn = ctk.CTkButton(
-            size_frame,
+            status_frame,
             text="📥 Manage Models",
             command=self._manage_models,
             width=140,
@@ -164,9 +133,9 @@ class SettingsTab(ctk.CTkFrame):
             fg_color="#1f6aa5",
             hover_color="#144870"
         )
-        manage_models_btn.pack(side="left", padx=20)
+        manage_models_btn.pack(side="right", padx=10)
         
-        # Active Model Switcher (if multiple models downloaded)
+        # Active Model Switcher (always visible)
         self._create_active_model_switcher(section)
         
         # FlashAttention
@@ -181,38 +150,90 @@ class SettingsTab(ctk.CTkFrame):
         )
         flash_check.pack(side="left", padx=5)
     
+    def _create_model_status_labels(self, parent, downloaded_models: list) -> None:
+        """Create status labels for installed models.
+        
+        Args:
+            parent: Parent widget
+            downloaded_models: List of downloaded model sizes
+        """
+        # 1.7B Model Status
+        is_1_7b_installed = "1.7B" in downloaded_models
+        model_1_7b_status = "✓ Installed" if is_1_7b_installed else "⚠ Not Installed"
+        color_1_7b = "#4ade80" if is_1_7b_installed else "#fb923c"
+        
+        label_1_7b = ctk.CTkLabel(
+            parent,
+            text=f"• 1.7B (higher quality, ~7GB VRAM) - {model_1_7b_status}",
+            font=("Arial", 11),
+            text_color=color_1_7b,
+            anchor="w"
+        )
+        label_1_7b.pack(anchor="w", pady=2)
+        
+        # 0.6B Model Status
+        is_0_6b_installed = "0.6B" in downloaded_models
+        model_0_6b_status = "✓ Installed" if is_0_6b_installed else "⚠ Not Installed"
+        color_0_6b = "#4ade80" if is_0_6b_installed else "#fb923c"
+        
+        label_0_6b = ctk.CTkLabel(
+            parent,
+            text=f"• 0.6B (faster, ~2.5GB VRAM) - {model_0_6b_status}",
+            font=("Arial", 11),
+            text_color=color_0_6b,
+            anchor="w"
+        )
+        label_0_6b.pack(anchor="w", pady=2)
+    
     def _create_active_model_switcher(self, parent) -> None:
-        """Create active model switcher if multiple models are downloaded."""
+        """Create active model switcher (always visible)."""
         downloaded_models = self.config.get("downloaded_models", [])
         active_model = self.config.get("active_model", None)
-        
-        # Only show if multiple models are downloaded
-        if len(downloaded_models) <= 1:
-            return
         
         switcher_frame = ctk.CTkFrame(parent)
         switcher_frame.pack(fill="x", padx=10, pady=10)
         
+        # Store reference for refresh
+        self.active_model_frame = switcher_frame
+        
         switcher_label = ctk.CTkLabel(switcher_frame, text="Active Model:", width=150)
         switcher_label.pack(side="left", padx=5)
         
-        self.active_model_var = ctk.StringVar(value=active_model or downloaded_models[0])
-        self.active_model_combo = ctk.CTkComboBox(
-            switcher_frame,
-            values=downloaded_models,
-            variable=self.active_model_var,
-            width=200,
-            command=self._on_active_model_changed
-        )
+        # Handle different cases
+        if not downloaded_models:
+            # No models installed
+            self.active_model_var = ctk.StringVar(value="None")
+            self.active_model_combo = ctk.CTkComboBox(
+                switcher_frame,
+                values=["None (Click Manage Models)"],
+                variable=self.active_model_var,
+                width=250,
+                state="disabled"
+            )
+        else:
+            # One or more models installed
+            self.active_model_var = ctk.StringVar(value=active_model or downloaded_models[0])
+            self.active_model_combo = ctk.CTkComboBox(
+                switcher_frame,
+                values=downloaded_models,
+                variable=self.active_model_var,
+                width=200,
+                command=self._on_active_model_changed,
+                state="readonly"
+            )
+        
         self.active_model_combo.pack(side="left", padx=5)
         
-        info_label = ctk.CTkLabel(
-            switcher_frame,
-            text="💡 Switch models instantly without restarting",
-            text_color="gray",
-            font=("Arial", 10)
-        )
-        info_label.pack(side="left", padx=10)
+        # Info label - only show if models are available
+        if downloaded_models:
+            info_text = "💡 Switch models instantly" if len(downloaded_models) > 1 else "💡 Only one model installed"
+            info_label = ctk.CTkLabel(
+                switcher_frame,
+                text=info_text,
+                text_color="gray",
+                font=("Arial", 10)
+            )
+            info_label.pack(side="left", padx=10)
     
     def _create_no_models_help(self, parent) -> None:
         """Create help banner when no models are installed."""
@@ -273,42 +294,34 @@ class SettingsTab(ctk.CTkFrame):
                 self.help_banner.destroy()
                 self.help_banner = None
         
-        # Update 1.7B radio button
-        if self.size_1_7b and self.size_1_7b.winfo_exists():
-            is_1_7b_installed = "1.7B" in downloaded_models
-            model_1_7b_text = "1.7B (higher quality, ~7GB VRAM)"
-            if is_1_7b_installed:
-                model_1_7b_text += " ✓ Installed"
-                if active_model == "1.7B":
-                    model_1_7b_text += " [Active]"
-            else:
-                model_1_7b_text += " ⚠ Not Installed"
-            
-            self.size_1_7b.configure(
-                text=model_1_7b_text,
-                state="normal" if is_1_7b_installed else "disabled"
-            )
+        # Update model status display
+        if self.model_status_frame and self.model_status_frame.winfo_exists():
+            # Clear old status labels
+            for widget in self.model_status_frame.winfo_children():
+                widget.destroy()
+            # Recreate with current status
+            self._create_model_status_labels(self.model_status_frame, downloaded_models)
         
-        # Update 0.6B radio button
-        if self.size_0_6b and self.size_0_6b.winfo_exists():
-            is_0_6b_installed = "0.6B" in downloaded_models
-            model_0_6b_text = "0.6B (faster, ~2.5GB VRAM)"
-            if is_0_6b_installed:
-                model_0_6b_text += " ✓ Installed"
-                if active_model == "0.6B":
-                    model_0_6b_text += " [Active]"
+        # Update active model dropdown
+        if self.active_model_combo and self.active_model_combo.winfo_exists():
+            if not downloaded_models:
+                # No models - show disabled state
+                self.active_model_combo.configure(
+                    values=["None (Click Manage Models)"],
+                    state="disabled"
+                )
+                self.active_model_var.set("None")
             else:
-                model_0_6b_text += " ⚠ Not Installed"
-            
-            self.size_0_6b.configure(
-                text=model_0_6b_text,
-                state="normal" if is_0_6b_installed else "disabled"
-            )
-        
-        # Update model_size_var to match active model if needed
-        current_selection = self.model_size_var.get()
-        if current_selection not in downloaded_models and active_model:
-            self.model_size_var.set(active_model)
+                # Models available - update dropdown
+                self.active_model_combo.configure(
+                    values=downloaded_models,
+                    state="readonly"
+                )
+                # Set to active model or first available
+                if active_model and active_model in downloaded_models:
+                    self.active_model_var.set(active_model)
+                elif downloaded_models:
+                    self.active_model_var.set(downloaded_models[0])
         
         logger.debug(f"Model selection UI refreshed: {downloaded_models}, active: {active_model}")
     
@@ -788,20 +801,14 @@ class SettingsTab(ctk.CTkFrame):
             if rep_penalty < 0.8 or rep_penalty > 1.5:
                 raise ValueError("Repetition penalty must be between 0.8 and 1.5")
             
-            # Validate model selection (must be installed)
-            selected_model = self.model_size_var.get()
-            downloaded_models = self.config.get("downloaded_models", [])
-            if selected_model not in downloaded_models:
-                raise ValueError(
-                    f"Cannot select {selected_model} model - it is not installed.\n"
-                    f"Use 'Manage Models' button to download it first."
-                )
-            
-            # Save settings
+            # Save settings (active_model is managed by the Active Model switcher)
             self.config.set("device", device_id, save=False)
-            self.config.set("model_size", selected_model, save=False)
             self.config.set("use_flash_attention", self.flash_var.get(), save=False)
-            self.config.set("output_dir", self.output_entry.get(), save=False)
+            
+            # Only save output_dir if not using workspace manager (legacy mode)
+            if hasattr(self, 'output_entry'):
+                self.config.set("output_dir", self.output_entry.get(), save=False)
+            
             self.config.set("generation_params.max_new_tokens", max_tokens, save=False)
             self.config.set("generation_params.temperature", temperature, save=False)
             self.config.set("generation_params.top_p", top_p, save=False)
