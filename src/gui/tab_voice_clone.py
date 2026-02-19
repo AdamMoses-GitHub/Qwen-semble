@@ -12,6 +12,7 @@ import time
 from core.audio_utils import save_audio, load_audio, get_audio_duration
 from utils.error_handler import validate_audio_for_cloning, logger, show_error_dialog
 from utils.threading_helpers import TTSWorker
+from utils.theme import get_theme_colors
 from gui.components import AudioPlayerWidget, FilePickerWidget
 
 if TYPE_CHECKING:
@@ -103,7 +104,8 @@ class VoiceCloneTab(ctk.CTkFrame):
         info_frame = ctk.CTkFrame(audio_frame)
         info_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         
-        self.audio_info_label = ctk.CTkLabel(info_frame, text="No audio selected", text_color="gray")
+        colors = get_theme_colors()
+        self.audio_info_label = ctk.CTkLabel(info_frame, text="No audio selected", text_color=colors["text_secondary"])
         self.audio_info_label.pack(side="left", padx=5)
         
         self.play_ref_button = ctk.CTkButton(
@@ -136,11 +138,12 @@ class VoiceCloneTab(ctk.CTkFrame):
         load_transcript_btn.grid(row=2, column=0, pady=5)
         
         # Info text
+        colors = get_theme_colors()
         info_text = ctk.CTkLabel(
             panel,
-            text="💡 Tip: Use 10-30 seconds of clear speech with matching transcript\nfor best voice cloning results.",
+            text="\ud83d\udca1 Tip: Use 10-30 seconds of clear speech with matching transcript\nfor best voice cloning results.",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             justify="left"
         )
         info_text.grid(row=3, column=0, sticky="n", padx=10, pady=10)

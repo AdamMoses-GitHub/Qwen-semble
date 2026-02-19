@@ -95,11 +95,12 @@ class NarrationTab(ctk.CTkFrame):
             radio.grid(row=idx, column=0, sticky="w", padx=5, pady=2)
             
             # Explainer text
+            colors = get_theme_colors()
             explainer_label = ctk.CTkLabel(
                 content_frame,
                 text=explainer,
                 font=("Arial", 11),
-                text_color="gray",
+                text_color=colors["text_secondary"],
                 anchor="w"
             )
             explainer_label.grid(row=idx, column=1, sticky="w", padx=(10, 5), pady=2)
@@ -165,7 +166,8 @@ class NarrationTab(ctk.CTkFrame):
         self.transcript_textbox.pack(fill="both", expand=True, padx=10, pady=5)
         
         # Statistics
-        self.stats_label = ctk.CTkLabel(panel, text="", text_color="gray")
+        colors = get_theme_colors()
+        self.stats_label = ctk.CTkLabel(panel, text="", text_color=colors["text_secondary"])
         self.stats_label.pack()
         
         # Generate button
@@ -198,7 +200,8 @@ class NarrationTab(ctk.CTkFrame):
         self.cancel_button.pack(pady=5)
         
         # Output info
-        self.output_label = ctk.CTkLabel(panel, text="", text_color="green")
+        colors = get_theme_colors()
+        self.output_label = ctk.CTkLabel(panel, text="", text_color=colors["success_text"])
         self.output_label.pack(pady=10)
     
     def _create_assignment_panel(self) -> None:
@@ -242,10 +245,11 @@ class NarrationTab(ctk.CTkFrame):
         self.mode_explanation_label.pack(fill="both", expand=True, padx=10, pady=10)
         
         # Parse Status label (larger, bold font)
+        colors = get_theme_colors()
         self.assignment_info_label = ctk.CTkLabel(
             self.assignment_panel,
             text="Select a voice assignment mode to begin",
-            text_color="gray",
+            text_color=colors["text_secondary"],
             font=("Arial", 14, "bold")
         )
         self.assignment_info_label.pack(pady=10)
@@ -493,10 +497,11 @@ class NarrationTab(ctk.CTkFrame):
         
         # Handle empty segments
         if len(self.segments) == 0:
+            colors = get_theme_colors()
             empty_label = ctk.CTkLabel(
                 self.segments_frame,
                 text="Load a transcript to assign voices to segments",
-                text_color="gray",
+                text_color=colors["text_secondary"],
                 font=("Arial", 12)
             )
             empty_label.pack(pady=40)
@@ -524,10 +529,11 @@ class NarrationTab(ctk.CTkFrame):
             self.segment_rows[segment.segment_id] = row
         
         if len(self.segments) > max_show:
+            colors = get_theme_colors()
             more_label = ctk.CTkLabel(
                 self.segments_frame,
                 text=f"... and {len(self.segments) - max_show} more segments",
-                text_color="gray"
+                text_color=colors["text_secondary"]
             )
             more_label.pack(pady=10)
         
@@ -709,10 +715,11 @@ class NarrationTab(ctk.CTkFrame):
         
         self.segments_frame.pack(fill="both", expand=True)
         
+        colors = get_theme_colors()
         empty_label = ctk.CTkLabel(
             self.segments_frame,
             text="Load a transcript with [Speaker]: format\nto detect and assign speakers",
-            text_color="gray",
+            text_color=colors["text_secondary"],
             font=("Arial", 12),
             justify="center"
         )

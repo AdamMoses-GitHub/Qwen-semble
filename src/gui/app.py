@@ -16,6 +16,7 @@ from core.audio_utils import AudioPlayer
 from utils.config import Config
 from utils.error_handler import logger
 from utils.threading_helpers import run_in_thread
+from utils.theme import get_theme_colors
 
 from gui.tab_voice_creation import VoiceCreationTab
 from gui.tab_narration import NarrationTab
@@ -69,11 +70,12 @@ class AboutDialog(ctk.CTkToplevel):
         )
         title_label.pack(pady=(15, 5))
         
+        colors = get_theme_colors()
         subtitle_label = ctk.CTkLabel(
             header_frame,
             text="TTS Voice Studio",
             font=("Arial", 16),
-            text_color="gray"
+            text_color=colors["text_secondary"]
         )
         subtitle_label.pack(pady=(0, 15))
         
@@ -148,11 +150,12 @@ class AboutDialog(ctk.CTkToplevel):
         github_link.pack(pady=(0, 10))
         
         # Copyright
+        colors = get_theme_colors()
         copyright_label = ctk.CTkLabel(
             main_frame,
-            text="© 2026 - Licensed under MIT",
+            text="\u00a9 2026 - Licensed under MIT",
             font=("Arial", 10),
-            text_color="gray"
+            text_color=colors["text_secondary"]
         )
         copyright_label.pack(pady=(5, 15))
         
@@ -376,7 +379,7 @@ class QwenTTSApp(ctk.CTk):
             warning_frame,
             text="⚠️ No AI model loaded. TTS features are disabled.",
             font=("Arial", 14, "bold"),
-            text_color="black"
+            text_color="white"
         )
         warning_label.pack(side="left", padx=20, pady=10)
         

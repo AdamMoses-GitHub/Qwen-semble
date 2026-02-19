@@ -10,6 +10,7 @@ from datetime import datetime
 from core.audio_utils import save_audio
 from utils.error_handler import logger, show_error_dialog
 from utils.threading_helpers import TTSWorker
+from utils.theme import get_theme_colors
 from gui.components import AudioPlayerWidget
 
 if TYPE_CHECKING:
@@ -122,11 +123,12 @@ class VoiceDesignTab(ctk.CTkFrame):
         self.language_combo.pack(side="left", padx=5)
         
         # Info text
+        colors = get_theme_colors()
         info_text = ctk.CTkLabel(
             panel,
-            text="💡 Tip: Be specific about gender, age, tone, pitch, and speaking style\nfor best voice design results.",
+            text="\ud83d\udca1 Tip: Be specific about gender, age, tone, pitch, and speaking style\nfor best voice design results.",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             justify="left"
         )
         info_text.grid(row=7, column=0, sticky="n", padx=10, pady=10)

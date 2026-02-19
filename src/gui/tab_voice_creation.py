@@ -11,6 +11,7 @@ import numpy as np
 from core.audio_utils import save_audio, load_audio, get_audio_duration
 from utils.error_handler import validate_audio_for_cloning, logger, show_error_dialog
 from utils.threading_helpers import TTSWorker
+from utils.theme import get_theme_colors
 from gui.components import AudioPlayerWidget, FilePickerWidget
 
 if TYPE_CHECKING:
@@ -104,11 +105,12 @@ class VoiceCreationTab(ctk.CTkFrame):
         self.mode_selector.grid(row=1, column=0, sticky="ew", padx=5, pady=(2, 5))
         
         # Info label about mode switching
+        colors = get_theme_colors()
         mode_info = ctk.CTkLabel(
             selector_frame,
             text="💡 Your test text and audio are preserved when switching modes",
             font=("Arial", 9),
-            text_color="gray"
+            text_color=colors["text_secondary"]
         )
         mode_info.grid(row=2, column=0, sticky="w", padx=5, pady=(2, 5))
         
@@ -255,7 +257,8 @@ class VoiceCreationTab(ctk.CTkFrame):
         info_frame.grid(row=2, column=0, sticky="ew", padx=5, pady=5)
         info_frame.columnconfigure(0, weight=1)
         
-        self.audio_info_label = ctk.CTkLabel(info_frame, text="No audio selected", text_color="gray")
+        colors = get_theme_colors()
+        self.audio_info_label = ctk.CTkLabel(info_frame, text="No audio selected", text_color=colors["text_secondary"])
         self.audio_info_label.grid(row=0, column=0, sticky="w", padx=5)
         
         self.play_ref_button = ctk.CTkButton(
@@ -287,11 +290,12 @@ class VoiceCreationTab(ctk.CTkFrame):
         load_transcript_btn.grid(row=2, column=0, pady=5)
         
         # Info tip
+        colors = get_theme_colors()
         info_tip = ctk.CTkLabel(
             panel,
             text="💡 Tip: Use 10-30 seconds of clear speech with matching transcript\nfor best voice cloning results.",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             justify="left"
         )
         info_tip.grid(row=3, column=0, sticky="nw", padx=10, pady=10)
@@ -382,11 +386,12 @@ class VoiceCreationTab(ctk.CTkFrame):
         self.language_combo.grid(row=0, column=1, padx=5)
         
         # Info tip
+        colors = get_theme_colors()
         info_tip = ctk.CTkLabel(
             panel,
             text="💡 Tip: Be specific about gender, age, tone, pitch, and speaking style\nfor best voice design results.",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             justify="left"
         )
         info_tip.grid(row=7, column=0, sticky="nw", padx=10, pady=10)
@@ -681,10 +686,11 @@ class VoiceCreationTab(ctk.CTkFrame):
         
         if not example_descriptions:
             # Fallback if config is empty (shouldn't happen)
+            colors = get_theme_colors()
             no_examples_label = ctk.CTkLabel(
                 self.example_frame,
                 text="No examples available. Click 'Generate New Examples' to create some.",
-                text_color="gray"
+                text_color=colors["text_secondary"]
             )
             no_examples_label.pack(padx=5, pady=10)
             return

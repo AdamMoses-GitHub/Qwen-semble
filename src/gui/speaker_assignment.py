@@ -102,10 +102,11 @@ class SpeakerAssignmentPanel(ctk.CTkFrame):
             self.speaker_rows[speaker] = row
         
         # Validation status
+        colors = get_theme_colors()
         self.validation_label = ctk.CTkLabel(
             self,
             text="",
-            text_color="orange",
+            text_color=colors["warning_text"],
             font=("Arial", 11)
         )
         self.validation_label.grid(row=3, column=0, pady=(5, 10), padx=10)

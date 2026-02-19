@@ -159,31 +159,75 @@ class SettingsTab(ctk.CTkFrame):
         """
         # 1.7B Model Status
         is_1_7b_installed = "1.7B" in downloaded_models
-        model_1_7b_status = "✓ Installed" if is_1_7b_installed else "⚠ Not Installed"
-        color_1_7b = "#4ade80" if is_1_7b_installed else "#fb923c"
         
-        label_1_7b = ctk.CTkLabel(
-            parent,
-            text=f"• 1.7B (higher quality, ~7GB VRAM) - {model_1_7b_status}",
-            font=("Arial", 11),
-            text_color=color_1_7b,
+        # Create row frame for 1.7B
+        row_1_7b = ctk.CTkFrame(parent, fg_color="transparent")
+        row_1_7b.pack(fill="x", pady=3)
+        
+        # Model name label
+        name_1_7b = ctk.CTkLabel(
+            row_1_7b,
+            text="• 1.7B (higher quality, ~7GB VRAM)",
+            font=("Arial", 12),
             anchor="w"
         )
-        label_1_7b.pack(anchor="w", pady=2)
+        name_1_7b.pack(side="left", padx=(0, 10))
+        
+        # Status badge with background
+        if is_1_7b_installed:
+            status_bg = "#16a34a"  # Green background
+            status_text = "✓ Installed"
+        else:
+            status_bg = "#ea580c"  # Orange background
+            status_text = "⚠ Not Installed"
+        
+        status_1_7b = ctk.CTkLabel(
+            row_1_7b,
+            text=status_text,
+            font=("Arial", 13, "bold"),
+            text_color="white",
+            fg_color=status_bg,
+            corner_radius=6,
+            padx=12,
+            pady=4
+        )
+        status_1_7b.pack(side="left")
         
         # 0.6B Model Status
         is_0_6b_installed = "0.6B" in downloaded_models
-        model_0_6b_status = "✓ Installed" if is_0_6b_installed else "⚠ Not Installed"
-        color_0_6b = "#4ade80" if is_0_6b_installed else "#fb923c"
         
-        label_0_6b = ctk.CTkLabel(
-            parent,
-            text=f"• 0.6B (faster, ~2.5GB VRAM) - {model_0_6b_status}",
-            font=("Arial", 11),
-            text_color=color_0_6b,
+        # Create row frame for 0.6B
+        row_0_6b = ctk.CTkFrame(parent, fg_color="transparent")
+        row_0_6b.pack(fill="x", pady=3)
+        
+        # Model name label
+        name_0_6b = ctk.CTkLabel(
+            row_0_6b,
+            text="• 0.6B (faster, ~2.5GB VRAM)",
+            font=("Arial", 12),
             anchor="w"
         )
-        label_0_6b.pack(anchor="w", pady=2)
+        name_0_6b.pack(side="left", padx=(0, 10))
+        
+        # Status badge with background
+        if is_0_6b_installed:
+            status_bg = "#16a34a"  # Green background
+            status_text = "✓ Installed"
+        else:
+            status_bg = "#ea580c"  # Orange background
+            status_text = "⚠ Not Installed"
+        
+        status_0_6b = ctk.CTkLabel(
+            row_0_6b,
+            text=status_text,
+            font=("Arial", 13, "bold"),
+            text_color="white",
+            fg_color=status_bg,
+            corner_radius=6,
+            padx=12,
+            pady=4
+        )
+        status_0_6b.pack(side="left")
     
     def _create_active_model_switcher(self, parent) -> None:
         """Create active model switcher (always visible)."""
@@ -226,11 +270,12 @@ class SettingsTab(ctk.CTkFrame):
         
         # Info label - only show if models are available
         if downloaded_models:
-            info_text = "💡 Switch models instantly" if len(downloaded_models) > 1 else "💡 Only one model installed"
+            colors = get_theme_colors()
+            info_text = "\ud83d\udca1 Switch models instantly" if len(downloaded_models) > 1 else "\ud83d\udca1 Only one model installed"
             info_label = ctk.CTkLabel(
                 switcher_frame,
                 text=info_text,
-                text_color="gray",
+                text_color=colors["text_secondary"],
                 font=("Arial", 10)
             )
             info_label.pack(side="left", padx=10)
@@ -247,7 +292,7 @@ class SettingsTab(ctk.CTkFrame):
             help_frame,
             text="⚠️",
             font=("Arial", 24),
-            text_color="black"
+            text_color="white"
         )
         icon_label.pack(side="left", padx=15, pady=10)
         
@@ -258,7 +303,7 @@ class SettingsTab(ctk.CTkFrame):
             text_frame,
             text="No AI Models Installed",
             font=("Arial", 14, "bold"),
-            text_color="black",
+            text_color="white",
             anchor="w"
         )
         title_label.pack(anchor="w", padx=5)
@@ -267,7 +312,7 @@ class SettingsTab(ctk.CTkFrame):
             text_frame,
             text="Click '📥 Manage Models' button below to download models for voice synthesis",
             font=("Arial", 11),
-            text_color="black",
+            text_color="white",
             anchor="w"
         )
         subtitle_label.pack(anchor="w", padx=5)
@@ -435,10 +480,11 @@ class SettingsTab(ctk.CTkFrame):
         title = ctk.CTkLabel(section, text="HuggingFace Authentication", font=("Arial", 14, "bold"))
         title.pack(pady=10)
         
+        colors = get_theme_colors()
         info_label = ctk.CTkLabel(
             section,
             text="Required for downloading models. Get your token at huggingface.co/settings/tokens",
-            text_color="gray"
+            text_color=colors["text_secondary"]
         )
         info_label.pack(pady=5)
         
@@ -555,11 +601,12 @@ class SettingsTab(ctk.CTkFrame):
         title.pack(pady=10)
         
         # Info text
+        colors = get_theme_colors()
         info_text = ctk.CTkLabel(
             section,
             text="Fine-tune voice generation quality and behavior. Adjust these if audio is cut off, too robotic, or needs more variation.",
             font=("Arial", 10),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             wraplength=700
         )
         info_text.pack(pady=(0, 10))
@@ -575,11 +622,12 @@ class SettingsTab(ctk.CTkFrame):
         self.tokens_entry.insert(0, str(self.config.get("generation_params.max_new_tokens", 2048)))
         self.tokens_entry.pack(side="left", padx=5)
         
+        colors = get_theme_colors()
         tokens_info = ctk.CTkLabel(
             tokens_frame,
             text="Maximum audio length (1024-4096). Increase if audio gets cut off. Higher = slower generation.",
             font=("Arial", 9),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
         tokens_info.pack(side="left", padx=10, fill="x", expand=True)
@@ -599,11 +647,12 @@ class SettingsTab(ctk.CTkFrame):
         self.temp_value_label.pack(side="left", padx=5)
         self.temp_slider.configure(command=lambda v: self.temp_value_label.configure(text=f"{v:.2f}"))
         
+        colors = get_theme_colors()
         temp_info = ctk.CTkLabel(
             temp_frame,
             text="Voice expressiveness (0.1-1.5). Low=consistent/robotic, High=varied/creative. Default: 0.7",
             font=("Arial", 9),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
         temp_info.pack(side="left", padx=10, fill="x", expand=True)
@@ -623,11 +672,12 @@ class SettingsTab(ctk.CTkFrame):
         self.top_p_value_label.pack(side="left", padx=5)
         self.top_p_slider.configure(command=lambda v: self.top_p_value_label.configure(text=f"{v:.2f}"))
         
+        colors = get_theme_colors()
         top_p_info = ctk.CTkLabel(
             top_p_frame,
             text="Word choice diversity (nucleus sampling). Low=predictable, High=creative. Default: 0.9",
             font=("Arial", 9),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
         top_p_info.pack(side="left", padx=10, fill="x", expand=True)
@@ -648,11 +698,12 @@ class SettingsTab(ctk.CTkFrame):
         )
         do_sample_check.pack(side="left", padx=5)
         
+        colors = get_theme_colors()
         do_sample_info = ctk.CTkLabel(
             do_sample_frame,
             text="Enable randomness in generation. Almost always should be ON for natural speech.",
             font=("Arial", 9),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
         do_sample_info.pack(side="left", padx=10, fill="x", expand=True)
@@ -672,11 +723,12 @@ class SettingsTab(ctk.CTkFrame):
         self.rep_pen_value_label.pack(side="left", padx=5)
         self.rep_pen_slider.configure(command=lambda v: self.rep_pen_value_label.configure(text=f"{v:.2f}"))
         
+        colors = get_theme_colors()
         rep_pen_info = ctk.CTkLabel(
             rep_pen_frame,
             text="Reduces repeated words/phrases (0.8-1.5). 1.0=no penalty, >1.0=discourage repetition. Default: 1.0",
             font=("Arial", 9),
-            text_color="gray",
+            text_color=colors["text_secondary"],
             anchor="w"
         )
         rep_pen_info.pack(side="left", padx=10, fill="x", expand=True)

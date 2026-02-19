@@ -7,6 +7,7 @@ from typing import Optional, List, Dict
 import os
 
 from utils.error_handler import logger
+from utils.theme import get_theme_colors
 
 
 class ModelSelectionDialog(ctk.CTkToplevel):
@@ -169,11 +170,12 @@ class ModelSelectionDialog(ctk.CTkToplevel):
                 f"✓ Device: CPU"
             )
         
+        colors = get_theme_colors()
         info_label = ctk.CTkLabel(
             sys_frame,
             text=info_text,
             font=("Arial", 11),
-            text_color="lightblue",
+            text_color=colors["info_text"],
             anchor="w",
             justify="left"
         )
@@ -272,11 +274,12 @@ class ModelSelectionDialog(ctk.CTkToplevel):
         radio.pack(side="left")
         
         if recommended:
+            colors = get_theme_colors()
             rec_label = ctk.CTkLabel(
                 header_frame,
-                text="⭐ Recommended for your system",
+                text="\u2b50 Recommended for your system",
                 font=("Arial", 11, "bold"),
-                text_color="gold"
+                text_color=colors["warning_text"]
             )
             rec_label.pack(side="left", padx=10)
         
