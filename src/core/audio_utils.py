@@ -6,6 +6,7 @@ import numpy as np
 from pathlib import Path
 from typing import Tuple, Optional, Callable
 import threading
+import weakref
 
 from utils.error_handler import AudioValidationError, logger
 
@@ -13,8 +14,8 @@ from utils.error_handler import AudioValidationError, logger
 class AudioPlayer:
     """Audio playback manager with state control."""
     
-    # Class-level registry to track all instances
-    _all_players = []
+    # Class-level registry using weak references so GC'd players are auto-removed
+    _all_players: list = []
     _registry_lock = threading.Lock()
     
     def __init__(self):
@@ -25,17 +26,31 @@ class AudioPlayer:
         self.stop_event = threading.Event()
         self.playback_thread = None
         
-        # Register this instance
+        # Register this instance via weak reference
         with AudioPlayer._registry_lock:
-            AudioPlayer._all_players.append(self)
+            AudioPlayer._all_players.append(weakref.ref(self))
     
     @classmethod
     def stop_all(cls) -> None:
         """Stop all audio players application-wide."""
         with cls._registry_lock:
-            for player in cls._all_players:
-                if player.is_playing_flag:
-                    player.stop()
+            # Prune dead references and stop active players
+            alive = []
+            for ref in cls._all_players:
+                player = ref()
+                if player is not None:
+                    alive.append(ref)
+                    if player.is_playing_flag:
+                        player.stop()
+            cls._all_players = alive
+    
+    def cleanup(self) -> None:
+        """Unregister this player from the class-level registry."""
+        with AudioPlayer._registry_lock:
+            AudioPlayer._all_players = [
+                ref for ref in AudioPlayer._all_players
+                if ref() is not None and ref() is not self
+            ]
     
     def play(self, audio: np.ndarray, sample_rate: int, callback: Optional[Callable] = None) -> None:
         """Play audio with optional completion callback.
@@ -48,11 +63,6 @@ class AudioPlayer:
         # Stop ALL audio players application-wide before starting new playback
         logger.debug(f"Starting audio playback - sample_rate: {sample_rate}Hz, duration: {len(audio)/sample_rate:.2f}s")
         AudioPlayer.stop_all()
-        
-        self.current_audio = audio
-        self.current_sr = sample_rate
-        self.is_playing_flag = True
-        self.stop_event.clear()
         
         self.current_audio = audio
         self.current_sr = sample_rate

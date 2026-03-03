@@ -146,6 +146,97 @@ class TTSEngine:
         # CPU always "has memory" (uses system RAM)
         return True, "CPU will use system RAM"
     
+    def _load_model(self, model_key: str, model_label: str, progress_callback: Optional[Callable] = None):
+        """Shared model loading logic with cache-clear retry and FlashAttention fallback.
+        
+        Args:
+            model_key: Key into self.MODELS (e.g. 'custom_voice_1.7B')
+            model_label: Human-readable label for log/progress messages
+            progress_callback: Optional callback for progress updates
+            
+        Returns:
+            Loaded Qwen3TTSModel instance
+        """
+        import shutil
+        
+        if progress_callback:
+            progress_callback(0, f"Loading {model_label} model...")
+        
+        from qwen_tts import Qwen3TTSModel
+        
+        model_name = self.MODELS.get(model_key)
+        if not model_name:
+            raise ModelLoadError(f"Model not available for key: {model_key}")
+        
+        logger.info(f"Loading model: {model_name}")
+        logger.debug(f"Model configuration - device: {self.device}, dtype: {self.dtype}, flash_attn: {self.use_flash_attention}")
+        
+        attn_impl = "flash_attention_2" if self.use_flash_attention else None
+        
+        try:
+            logger.debug("Downloading/loading model from HuggingFace...")
+            model = Qwen3TTSModel.from_pretrained(
+                model_name,
+                device_map=self.device,
+                dtype=self.dtype,
+                attn_implementation=attn_impl
+            )
+            logger.debug("Model loaded into memory successfully")
+        except Exception as e:
+            error_str = str(e)
+            
+            # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
+            needs_cache_clear = (
+                "WinError 1314" in error_str or 
+                "required privilege is not held" in error_str or
+                "Can't load feature extractor" in error_str or
+                "preprocessor_config.json" in error_str or
+                "is not a local folder and is not a valid model identifier" in error_str
+            )
+            
+            if needs_cache_clear:
+                logger.error("Corrupted model cache detected - clearing and retrying...")
+                cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
+                
+                for cache_subdir in ['hub', 'transformers']:
+                    model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
+                    if model_cache.exists():
+                        logger.warning(f"Removing corrupted cache: {model_cache}")
+                        try:
+                            shutil.rmtree(model_cache)
+                            logger.info(f"Successfully removed cache: {model_cache}")
+                        except Exception as rm_err:
+                            logger.error(f"Failed to remove cache: {rm_err}")
+                
+                os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
+                logger.info("Retrying fresh model download...")
+                model = Qwen3TTSModel.from_pretrained(
+                    model_name,
+                    device_map=self.device,
+                    dtype=self.dtype,
+                    attn_implementation=attn_impl
+                )
+                logger.info("Model loaded successfully after cache clear and retry")
+                
+            elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
+                logger.warning("FlashAttention not available, falling back to standard attention")
+                model = Qwen3TTSModel.from_pretrained(
+                    model_name,
+                    device_map=self.device,
+                    dtype=self.dtype,
+                    attn_implementation=None
+                )
+                self.use_flash_attention = False
+                logger.debug("Model loaded successfully with standard attention")
+            else:
+                raise
+        
+        if progress_callback:
+            progress_callback(100, f"{model_label} model loaded")
+        
+        logger.info(f"{model_label} model loaded successfully")
+        return model
+    
     def load_custom_voice_model(
         self,
         model_size: str = "1.7B",
@@ -158,96 +249,13 @@ class TTSEngine:
             progress_callback: Optional callback for progress updates
         """
         try:
-            logger.debug(f"Starting CustomVoice model load - size: {model_size}")
-            if progress_callback:
-                progress_callback(0, f"Loading CustomVoice {model_size} model...")
-            
-            logger.debug("Importing Qwen3TTSModel...")
-            from qwen_tts import Qwen3TTSModel
-            
-            model_key = f"custom_voice_{model_size}"
-            model_name = self.MODELS.get(model_key)
-            
-            if not model_name:
-                raise ModelLoadError(f"Invalid model size: {model_size}")
-            
-            logger.info(f"Loading model: {model_name}")
-            logger.debug(f"Model configuration - device: {self.device}, dtype: {self.dtype}, flash_attn: {self.use_flash_attention}")
-            
-            attn_impl = "flash_attention_2" if self.use_flash_attention else None
-            logger.debug(f"Attention implementation: {attn_impl}")
-            
-            try:
-                logger.debug("Downloading/loading model from HuggingFace...")
-                self.custom_voice_model = Qwen3TTSModel.from_pretrained(
-                    model_name,
-                    device_map=self.device,
-                    dtype=self.dtype,
-                    attn_implementation=attn_impl
-                )
-                logger.debug("Model loaded into memory successfully")
-            except Exception as e:
-                error_str = str(e)
-                
-                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
-                needs_cache_clear = (
-                    "WinError 1314" in error_str or 
-                    "required privilege is not held" in error_str or
-                    "Can't load feature extractor" in error_str or
-                    "preprocessor_config.json" in error_str or
-                    "is not a local folder and is not a valid model identifier" in error_str
-                )
-                
-                if needs_cache_clear:
-                    logger.error("Corrupted model cache detected - clearing and retrying...")
-                    
-                    # Try to clear the corrupted model cache
-                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
-                    
-                    # Clear from both possible cache locations
-                    for cache_subdir in ['hub', 'transformers']:
-                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
-                        if model_cache.exists():
-                            logger.warning(f"Removing corrupted cache: {model_cache}")
-                            try:
-                                import shutil
-                                shutil.rmtree(model_cache)
-                                logger.info(f"Successfully removed cache: {model_cache}")
-                            except Exception as rm_err:
-                                logger.error(f"Failed to remove cache: {rm_err}")
-                    
-                    # Set environment to definitely disable symlinks
-                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
-                    
-                    # Retry download
-                    logger.info("Retrying fresh model download...")
-                    self.custom_voice_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=attn_impl
-                    )
-                    logger.info("Model loaded successfully after cache clear and retry")
-                    
-                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
-                    logger.warning("FlashAttention not available, falling back to standard attention")
-                    logger.debug("Retrying model load without FlashAttention...")
-                    self.custom_voice_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=None
-                    )
-                    self.use_flash_attention = False
-                    logger.debug("Model loaded successfully with standard attention")
-                else:
-                    raise
-            
-            if progress_callback:
-                progress_callback(100, f"CustomVoice {model_size} model loaded")
-            
-            logger.info(f"CustomVoice model loaded successfully")
-            
+            self.custom_voice_model = self._load_model(
+                model_key=f"custom_voice_{model_size}",
+                model_label=f"CustomVoice {model_size}",
+                progress_callback=progress_callback
+            )
+        except ModelLoadError:
+            raise
         except Exception as e:
             logger.error(f"Failed to load CustomVoice model: {e}")
             raise ModelLoadError(f"Failed to load CustomVoice model: {e}")
@@ -264,83 +272,13 @@ class TTSEngine:
             progress_callback: Optional callback for progress updates
         """
         try:
-            if progress_callback:
-                progress_callback(0, f"Loading VoiceDesign {model_size} model...")
-            
-            from qwen_tts import Qwen3TTSModel
-            
-            model_key = f"voice_design_{model_size}"
-            model_name = self.MODELS.get(model_key)
-            
-            if not model_name:
-                raise ModelLoadError(f"VoiceDesign model not available for size: {model_size}")
-            
-            logger.info(f"Loading model: {model_name}")
-            
-            attn_impl = "flash_attention_2" if self.use_flash_attention else None
-            
-            try:
-                self.voice_design_model = Qwen3TTSModel.from_pretrained(
-                    model_name,
-                    device_map=self.device,
-                    dtype=self.dtype,
-                    attn_implementation=attn_impl
-                )
-            except Exception as e:
-                error_str = str(e)
-                
-                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
-                needs_cache_clear = (
-                    "WinError 1314" in error_str or 
-                    "required privilege is not held" in error_str or
-                    "Can't load feature extractor" in error_str or
-                    "preprocessor_config.json" in error_str or
-                    "is not a local folder and is not a valid model identifier" in error_str
-                )
-                
-                if needs_cache_clear:
-                    logger.error("Corrupted model cache detected - clearing and retrying...")
-                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
-                    
-                    # Clear from both possible cache locations
-                    for cache_subdir in ['hub', 'transformers']:
-                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
-                        if model_cache.exists():
-                            logger.warning(f"Removing corrupted cache: {model_cache}")
-                            try:
-                                import shutil
-                                shutil.rmtree(model_cache)
-                                logger.info(f"Successfully removed cache: {model_cache}")
-                            except Exception as rm_err:
-                                logger.error(f"Failed to remove cache: {rm_err}")
-                    
-                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
-                    logger.info("Retrying fresh model download...")
-                    self.voice_design_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=attn_impl
-                    )
-                    logger.info("Model loaded successfully after cache clear and retry")
-                    
-                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
-                    logger.warning("FlashAttention not available, falling back to standard attention")
-                    self.voice_design_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=None
-                    )
-                    self.use_flash_attention = False
-                else:
-                    raise
-            
-            if progress_callback:
-                progress_callback(100, f"VoiceDesign {model_size} model loaded")
-            
-            logger.info(f"VoiceDesign model loaded successfully")
-            
+            self.voice_design_model = self._load_model(
+                model_key=f"voice_design_{model_size}",
+                model_label=f"VoiceDesign {model_size}",
+                progress_callback=progress_callback
+            )
+        except ModelLoadError:
+            raise
         except Exception as e:
             logger.error(f"Failed to load VoiceDesign model: {e}")
             raise ModelLoadError(f"Failed to load VoiceDesign model: {e}")
@@ -357,83 +295,13 @@ class TTSEngine:
             progress_callback: Optional callback for progress updates
         """
         try:
-            if progress_callback:
-                progress_callback(0, f"Loading Base {model_size} model...")
-            
-            from qwen_tts import Qwen3TTSModel
-            
-            model_key = f"base_{model_size}"
-            model_name = self.MODELS.get(model_key)
-            
-            if not model_name:
-                raise ModelLoadError(f"Invalid model size: {model_size}")
-            
-            logger.info(f"Loading model: {model_name}")
-            
-            attn_impl = "flash_attention_2" if self.use_flash_attention else None
-            
-            try:
-                self.base_model = Qwen3TTSModel.from_pretrained(
-                    model_name,
-                    device_map=self.device,
-                    dtype=self.dtype,
-                    attn_implementation=attn_impl
-                )
-            except Exception as e:
-                error_str = str(e)
-                
-                # Handle corrupted cache (symlink issues, incomplete downloads, etc.)
-                needs_cache_clear = (
-                    "WinError 1314" in error_str or 
-                    "required privilege is not held" in error_str or
-                    "Can't load feature extractor" in error_str or
-                    "preprocessor_config.json" in error_str or
-                    "is not a local folder and is not a valid model identifier" in error_str
-                )
-                
-                if needs_cache_clear:
-                    logger.error("Corrupted model cache detected - clearing and retrying...")
-                    cache_dir = Path(os.environ.get('HF_HOME', Path.home() / '.cache' / 'huggingface'))
-                    
-                    # Clear from both possible cache locations
-                    for cache_subdir in ['hub', 'transformers']:
-                        model_cache = cache_dir / cache_subdir / f"models--{model_name.replace('/', '--')}"
-                        if model_cache.exists():
-                            logger.warning(f"Removing corrupted cache: {model_cache}")
-                            try:
-                                import shutil
-                                shutil.rmtree(model_cache)
-                                logger.info(f"Successfully removed cache: {model_cache}")
-                            except Exception as rm_err:
-                                logger.error(f"Failed to remove cache: {rm_err}")
-                    
-                    os.environ['HF_HUB_DISABLE_SYMLINKS'] = '1'
-                    logger.info("Retrying fresh model download...")
-                    self.base_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=attn_impl
-                    )
-                    logger.info("Model loaded successfully after cache clear and retry")
-                    
-                elif "flash_attn" in error_str.lower() and attn_impl == "flash_attention_2":
-                    logger.warning("FlashAttention not available, falling back to standard attention")
-                    self.base_model = Qwen3TTSModel.from_pretrained(
-                        model_name,
-                        device_map=self.device,
-                        dtype=self.dtype,
-                        attn_implementation=None
-                    )
-                    self.use_flash_attention = False
-                else:
-                    raise
-            
-            if progress_callback:
-                progress_callback(100, f"Base {model_size} model loaded")
-            
-            logger.info(f"Base model loaded successfully")
-            
+            self.base_model = self._load_model(
+                model_key=f"base_{model_size}",
+                model_label=f"Base {model_size}",
+                progress_callback=progress_callback
+            )
+        except ModelLoadError:
+            raise
         except Exception as e:
             logger.error(f"Failed to load Base model: {e}")
             raise ModelLoadError(f"Failed to load Base model: {e}")

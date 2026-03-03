@@ -289,6 +289,7 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
             width=300
         )
         self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        self._search_after_id = None
         self.search_entry.bind("<KeyRelease>", lambda e: self._on_search_changed())
         
         clear_btn = ctk.CTkButton(
@@ -417,7 +418,14 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
             no_voices_label.grid(row=0, column=0, pady=50)
     
     def _on_search_changed(self) -> None:
-        """Handle search query change."""
+        """Handle search query change with debounce (300ms)."""
+        if self._search_after_id is not None:
+            self.after_cancel(self._search_after_id)
+        self._search_after_id = self.after(300, self._apply_search)
+    
+    def _apply_search(self) -> None:
+        """Apply the current search query after debounce delay."""
+        self._search_after_id = None
         self.search_query = self.search_entry.get()
         self._populate_voices()
     
