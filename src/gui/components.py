@@ -86,9 +86,9 @@ class AudioPlayerWidget(ctk.CTkFrame):
         try:
             self.audio_player.stop()
             self._on_playback_complete()
-        except Exception:
+        except Exception as e:
             # Widget might have been destroyed
-            pass
+            logger.debug(f"Error stopping playback (widget may be destroyed): {e}")
     
     def _on_playback_complete(self) -> None:
         """Handle playback completion."""

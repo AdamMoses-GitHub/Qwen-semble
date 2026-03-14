@@ -237,6 +237,12 @@ class WorkspaceManager:
         """
         return self.get_working_directory() / "voice_library.json"
     
+    def _subdir(self, name: str) -> Path:
+        """Return (and create) a named subdirectory of the working directory."""
+        dir_path = self.get_working_directory() / name
+        dir_path.mkdir(parents=True, exist_ok=True)
+        return dir_path
+
     def get_cloned_voices_dir(self) -> Path:
         """Get path to cloned voices directory.
         
@@ -245,9 +251,7 @@ class WorkspaceManager:
         Returns:
             Path to cloned_voices directory
         """
-        dir_path = self.get_working_directory() / "cloned_voices"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        return self._subdir("cloned_voices")
     
     def get_designed_voices_dir(self) -> Path:
         """Get path to designed voices directory.
@@ -257,9 +261,7 @@ class WorkspaceManager:
         Returns:
             Path to designed_voices directory
         """
-        dir_path = self.get_working_directory() / "designed_voices"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        return self._subdir("designed_voices")
     
     def get_narrations_dir(self) -> Path:
         """Get path to narrations output directory.
@@ -269,9 +271,7 @@ class WorkspaceManager:
         Returns:
             Path to narrations directory
         """
-        dir_path = self.get_working_directory() / "narrations"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        return self._subdir("narrations")
     
     def get_temp_dir(self) -> Path:
         """Get path to temporary files directory.
@@ -281,9 +281,7 @@ class WorkspaceManager:
         Returns:
             Path to temp directory
         """
-        dir_path = self.get_working_directory() / "temp"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        return self._subdir("temp")
     
     def get_logs_dir(self) -> Path:
         """Get path to logs directory.
@@ -293,9 +291,7 @@ class WorkspaceManager:
         Returns:
             Path to logs directory
         """
-        dir_path = self.get_working_directory() / "logs"
-        dir_path.mkdir(parents=True, exist_ok=True)
-        return dir_path
+        return self._subdir("logs")
     
     def get_hf_token_file(self) -> Path:
         """Get path to HuggingFace token file.

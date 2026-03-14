@@ -72,6 +72,8 @@ class AudioPlayer:
         def _play_thread():
             try:
                 logger.debug("Playing audio through sounddevice...")
+                if self.stop_event.is_set():
+                    return
                 sd.play(audio, sample_rate)
                 sd.wait()
                 
