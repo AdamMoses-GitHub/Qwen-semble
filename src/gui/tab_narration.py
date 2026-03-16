@@ -4,6 +4,7 @@ import customtkinter as ctk
 from tkinter import filedialog, messagebox
 from pathlib import Path
 from datetime import datetime
+import time
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,7 +13,7 @@ if TYPE_CHECKING:
 from core.transcript_parser import TranscriptParser
 from core.audio_utils import save_audio, merge_audio_segments
 from utils.error_handler import logger, show_error_dialog
-from utils.threading_helpers import CancellableWorker
+from utils.threading_helpers import CancellableWorker, run_in_thread
 from utils.theme import get_theme_colors
 from gui.components import AudioPlayerWidget, SegmentListRow, ColoredPreviewWindow
 from gui.voice_browser import VoiceBrowserWidget
@@ -35,7 +36,10 @@ class NarrationTab(ctk.CTkFrame):
         self.transcript_text = ""
         self.segments = []
         self.voice_mapping = {}
-        self.generated_segments = []
+        self.generated_segments = []  # list of (audio_array, sr) per segment
+        self.last_output_path = None  # Path to the last saved narration file
+        self.last_sr = None
+        self.segment_regen_players = {}  # seg_idx -> AudioPlayer
         self.worker = None
         
         # Selected voice for single mode
@@ -54,6 +58,9 @@ class NarrationTab(ctk.CTkFrame):
         
         # Pack the frame into parent
         self.pack(fill="both", expand=True)
+
+        # Restore previous session after the UI is fully rendered
+        self.after(200, self._restore_session)
     
     def _create_mode_selector(self) -> None:
         """Create voice assignment mode selector at top."""
@@ -160,6 +167,17 @@ class NarrationTab(ctk.CTkFrame):
             state="disabled"
         )
         self.colored_preview_button.pack(side="left", padx=5)
+
+        # Clear All button
+        clear_btn = ctk.CTkButton(
+            button_container,
+            text="Clear All",
+            command=self._clear_all,
+            width=100,
+            fg_color="#c0392b",
+            hover_color="#922b21"
+        )
+        clear_btn.pack(side="left", padx=5)
         
         # Transcript text
         self.transcript_textbox = ctk.CTkTextbox(panel, height=200)
@@ -203,6 +221,26 @@ class NarrationTab(ctk.CTkFrame):
         colors = get_theme_colors()
         self.output_label = ctk.CTkLabel(panel, text="", text_color=colors["success_text"])
         self.output_label.pack(pady=10)
+
+        # Segment results panel  — shown after generation, hidden until then
+        self.segment_results_outer = ctk.CTkFrame(panel)
+        seg_header_row = ctk.CTkFrame(self.segment_results_outer, fg_color="transparent")
+        seg_header_row.pack(fill="x", padx=8, pady=(6, 2))
+        ctk.CTkLabel(
+            seg_header_row,
+            text="Segment Results",
+            font=("Arial", 13, "bold")
+        ).pack(side="left")
+        colors2 = get_theme_colors()
+        ctk.CTkLabel(
+            seg_header_row,
+            text="Click \u21ba Re-gen to re-synthesise a single segment without regenerating everything",
+            font=("Arial", 10),
+            text_color=colors2["text_secondary"]
+        ).pack(side="left", padx=10)
+        self.segment_results_scroll = ctk.CTkScrollableFrame(self.segment_results_outer, height=180)
+        self.segment_results_scroll.pack(fill="both", expand=True, padx=5, pady=(0, 6))
+        # NOT packed into panel yet — _populate_segment_results will pack it
     
     def _create_assignment_panel(self) -> None:
         """Create voice assignment panel."""
@@ -374,6 +412,7 @@ class NarrationTab(ctk.CTkFrame):
         text = self.transcript_textbox.get("1.0", "end-1c").strip()
         if text:
             self._parse_transcript(show_messages=False)
+        self._save_session()
     
     def refresh_voice_list(self) -> None:
         """Public method to refresh voice list (called from other tabs)."""
@@ -472,6 +511,7 @@ class NarrationTab(ctk.CTkFrame):
             logger.info(f"Successfully parsed {len(self.segments)} segments")
             # Generate button will be enabled/disabled by _update_parse_status based on assignments
             self._update_parse_status()
+            self._save_session()
             if show_messages:
                 messagebox.showinfo("Success", f"Parsed {len(self.segments)} segments")
             
@@ -788,6 +828,7 @@ class NarrationTab(ctk.CTkFrame):
         
         logger.info(f"Assigned voice '{voice_data['name']}' to segment {segment_id}")
         self._update_parse_status()
+        self._save_session()
     
     def _on_speaker_assignment_change(self, speaker: str, voice_data: dict) -> None:
         """Handle speaker-to-voice assignment changes."""
@@ -795,6 +836,7 @@ class NarrationTab(ctk.CTkFrame):
         # The assignment is stored in the speaker_assignment_panel
         # We'll use it during generation
         self._update_parse_status()
+        self._save_session()
     
     def _update_parse_status(self) -> None:
         """Update the Parse Status label based on current transcript and assignment state."""
@@ -970,7 +1012,13 @@ class NarrationTab(ctk.CTkFrame):
         self.generate_button.configure(state="disabled")
         self.cancel_button.configure(state="normal")
         
+        # Hide previous segment results while regenerating
+        if self.segment_results_outer.winfo_manager():
+            self.segment_results_outer.pack_forget()
+        
         self.generated_segments = []
+        self.last_output_path = None
+        self.last_sr = None
         
         def generate_task(progress_callback):
             """Background generation task."""
@@ -982,27 +1030,50 @@ class NarrationTab(ctk.CTkFrame):
             gen_params = self.config.get("generation_params", {})
             logger.debug(f"Using generation params: {gen_params}")
             
+            task_start = time.time()
+            seg_elapsed_times = []
+            
+            def _fmt_duration(secs: float) -> str:
+                """Format seconds into a human-readable duration string."""
+                secs = int(secs)
+                if secs < 60:
+                    return f"{secs}s"
+                m, s = divmod(secs, 60)
+                if secs < 3600:
+                    return f"{m}m {s:02d}s"
+                h, m = divmod(m, 60)
+                return f"{h}h {m:02d}m"
+            
             for i, segment in enumerate(self.segments):
                 # Check for cancellation
                 if self.worker and self.worker.stop_flag.is_set():
                     logger.info("Generation cancelled by user")
                     return None
                 
+                # Compute ETA from average of completed segment durations
+                elapsed_total = time.time() - task_start
+                if seg_elapsed_times:
+                    avg_seg = sum(seg_elapsed_times) / len(seg_elapsed_times)
+                    eta_secs = avg_seg * (total - i)
+                    eta_str = f"ETA ~{_fmt_duration(eta_secs)}"
+                else:
+                    eta_str = "ETA estimating..."
+                
                 # Update progress
                 progress = int((i / total) * 100)
-                progress_callback(progress, f"Processing segment {i+1}/{total}")
+                progress_callback(
+                    progress,
+                    f"Segment {i+1} / {total}  \u2022  {eta_str}  \u2022  Elapsed: {_fmt_duration(elapsed_total)}"
+                )
                 logger.debug(f"Generating segment {i+1}/{total} - voice: {segment.voice}, text: '{segment.text[:50]}...'")
                 
-                # Generate audio for segment
-                voice = segment.voice
+                seg_start = time.time()
+                
                 text = segment.text
-                
-                # Get voice data from library
+                voice = segment.voice
                 voice_data = self.voice_library.get_voice_by_name(voice)
-                
                 if voice_data:
-                    voice_type = voice_data.get("type")
-                    
+                    voice_type = voice_data.get('type', 'cloned')
                     if voice_type == "cloned":
                         # Cloned voice - load prompt and use Base model
                         logger.debug(f"Loading cloned voice: {voice_data['id']}")
@@ -1062,10 +1133,12 @@ class NarrationTab(ctk.CTkFrame):
                     logger.error(f"Voice not found: {voice}")
                     continue
                 
-                logger.debug(f"Segment {i+1} generated successfully")
+                seg_elapsed_times.append(time.time() - seg_start)
+                logger.debug(f"Segment {i+1} generated successfully ({seg_elapsed_times[-1]:.1f}s)")
                 segments_audio.append((wavs[0], sr))
             
-            logger.info(f"All {total} segments generated successfully")
+            total_elapsed = time.time() - task_start
+            logger.info(f"All {total} segments generated successfully in {_fmt_duration(total_elapsed)}")
             return segments_audio
         
         def on_progress(percentage, message):
@@ -1102,11 +1175,23 @@ class NarrationTab(ctk.CTkFrame):
                 output_file = output_dir / "narration_full.wav"
                 logger.info(f"Saving narration to: {output_file}")
                 save_audio(merged, sr, str(output_file))
+
+                # Save companion files
+                try:
+                    self._save_narration_companions(output_dir, output_file, merged, sr, timestamp)
+                except Exception as ce:
+                    logger.warning(f"Could not save companion files: {ce}")
+
+                # Store results for per-segment re-generation
+                self.generated_segments = result
+                self.last_output_path = output_file
+                self.last_sr = sr
                 
                 self.output_label.configure(text=f"Saved: {output_file}")
                 self.progress_label.configure(text="Complete!")
                 
                 self._reset_generate_ui()
+                self._populate_segment_results()
                 logger.info("Narration generation completed successfully")
                 messagebox.showinfo("Success", f"Narration generated!\n\nSaved to:\n{output_file}")
             except Exception as e:
@@ -1138,7 +1223,79 @@ class NarrationTab(ctk.CTkFrame):
         )
         self.worker.start()
         logger.debug("Worker thread started")
-    
+
+    def _save_narration_companions(self, output_dir, output_file, merged_audio, sr, timestamp: str) -> None:
+        """Save narration_transcript.txt and narration_info.txt alongside the wav."""
+        from pathlib import Path as _Path
+
+        mode = self.mode_var.get()
+        mode_labels = {
+            "single": "Single Voice",
+            "manual": "Segment Assignment",
+            "annotated": "Annotated Speakers",
+        }
+        mode_label = mode_labels.get(mode, mode)
+
+        gen_params = self.config.get("generation_params", {})
+        active_model = self.config.get("active_model") or self.config.get("model_size", "?")
+        device = self.config.get("device", "?")
+        total_duration = len(merged_audio) / sr if sr else 0
+
+        # ── transcript ────────────────────────────────────────────────
+        transcript_text = self.transcript_textbox.get("1.0", "end-1c").strip()
+        transcript_file = output_dir / "narration_transcript.txt"
+        with open(transcript_file, "w", encoding="utf-8") as f:
+            f.write(transcript_text)
+
+        # ── info / readme ─────────────────────────────────────────────
+        lines = []
+        lines.append("=" * 60)
+        lines.append("NARRATION GENERATION INFO")
+        lines.append("=" * 60)
+        lines.append(f"Generated : {timestamp[:4]}-{timestamp[4:6]}-{timestamp[6:8]} "
+                     f"{timestamp[9:11]}:{timestamp[11:13]}:{timestamp[13:15]}")
+        lines.append(f"Output    : {output_file.name}")
+        lines.append(f"Duration  : {total_duration:.1f}s  ({total_duration/60:.2f} min)")
+        lines.append(f"Segments  : {len(self.segments)}")
+        lines.append("")
+
+        lines.append("── MODE ─────────────────────────────────────────────────")
+        lines.append(f"  {mode_label}")
+        lines.append("")
+
+        lines.append("── MODEL & DEVICE ───────────────────────────────────────")
+        lines.append(f"  Model  : Qwen2.5-{active_model}")
+        lines.append(f"  Device : {device}")
+        lines.append("")
+
+        lines.append("── GENERATION PARAMETERS ────────────────────────────────")
+        for k, v in gen_params.items():
+            lines.append(f"  {k:<22}: {v}")
+        lines.append("")
+
+        lines.append("── VOICE ASSIGNMENTS ────────────────────────────────────")
+        if mode == "single" and self.selected_voice_data:
+            vd = self.selected_voice_data
+            lines.append(f"  Voice : {vd['name']}  [{vd.get('type','?')}]  (id: {vd.get('id','?')})")
+        elif mode == "manual":
+            for seg in self.segments:
+                vd = self.voice_library.get_voice_by_name(seg.voice) or {}
+                preview = seg.text[:50].replace("\n", " ") + ("…" if len(seg.text) > 50 else "")
+                lines.append(f"  Seg {seg.segment_id + 1:>3} | {seg.voice:<25} [{vd.get('type','?')}] | {preview}")
+        elif mode == "annotated" and self.speaker_assignment_panel:
+            for speaker, vd in self.speaker_assignment_panel.get_assignments().items():
+                lines.append(f"  {speaker:<20} → {vd['name']:<25} [{vd.get('type','?')}]  (id: {vd.get('id','?')})")
+        else:
+            lines.append("  (no assignments recorded)")
+        lines.append("")
+        lines.append("=" * 60)
+
+        info_file = output_dir / "narration_info.txt"
+        with open(info_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
+        logger.info(f"Saved companion files: {transcript_file.name}, {info_file.name}")
+
     def _cancel_generation(self) -> None:
         """Cancel current generation."""
         if self.worker:
@@ -1151,3 +1308,367 @@ class NarrationTab(ctk.CTkFrame):
         self._update_parse_status()
         self.cancel_button.configure(state="disabled")
         self.worker = None
+
+    def _clear_all(self) -> None:
+        """Reset the narration tab to its default blank state."""
+        from tkinter import messagebox as _mb
+        if not _mb.askyesno("Clear All", "Clear all text, voice assignments, and results?", parent=self):
+            return
+
+        logger.info("Clearing narration tab")
+
+        # Cancel any running generation
+        if self.worker:
+            self.worker.stop_flag.set()
+            self.worker = None
+
+        # Clear data state
+        self.segments = []
+        self.voice_mapping = {}
+        self.generated_segments = []
+        self.last_output_path = None
+        self.last_sr = None
+        self.transcript_text = ""
+        self.selected_voice_data = None
+        for player in self.segment_regen_players.values():
+            try:
+                player.stop()
+            except Exception:
+                pass
+        self.segment_regen_players = {}
+
+        # Clear transcript textbox
+        self.transcript_textbox.delete("1.0", "end")
+
+        # Reset stats/labels
+        self.stats_label.configure(text="")
+        self.progress_bar.set(0)
+        self.progress_label.configure(text="")
+        self.output_label.configure(text="")
+
+        # Hide segment results panel
+        if self.segment_results_outer.winfo_manager():
+            self.segment_results_outer.pack_forget()
+        for w in self.segment_results_scroll.winfo_children():
+            w.destroy()
+
+        # Reset buttons
+        self.generate_button.configure(state="disabled")
+        self.cancel_button.configure(state="disabled")
+        self.colored_preview_button.configure(state="disabled")
+
+        # Reset mode to single
+        self.mode_var.set("single")
+        self._on_mode_change("single")
+
+        # Destroy speaker assignment panel
+        if self.speaker_assignment_panel:
+            self.speaker_assignment_panel.destroy()
+            self.speaker_assignment_panel = None
+
+        # Clear segments frame widgets and rows
+        self.segment_rows = {}
+        for w in self.segments_frame.winfo_children():
+            w.destroy()
+
+        # Wipe the saved session so it doesn't restore on next launch
+        if self.workspace_mgr:
+            try:
+                session_file = self.workspace_mgr.get_narration_session_file()
+                if session_file.exists():
+                    session_file.unlink()
+            except Exception as e:
+                logger.debug(f"Could not delete narration session file: {e}")
+
+        logger.info("Narration tab cleared")
+
+    # ------------------------------------------------------------------
+    # Per-segment regeneration
+    # ------------------------------------------------------------------
+
+    def _populate_segment_results(self) -> None:
+        """Show per-segment results panel after a successful generation."""
+        if not self.generated_segments or not self.segments:
+            return
+
+        # Clear any previous rows and player references
+        for w in self.segment_results_scroll.winfo_children():
+            w.destroy()
+        # Stop and remove old players
+        for player in self.segment_regen_players.values():
+            try:
+                player.stop()
+            except Exception:
+                pass
+        self.segment_regen_players = {}
+
+        colors = get_theme_colors()
+        color_palette = self._get_color_palette()
+
+        for i, (audio, sr) in enumerate(self.generated_segments):
+            if i >= len(self.segments):
+                break
+            seg = self.segments[i]
+            color = color_palette[i % len(color_palette)]
+
+            row = ctk.CTkFrame(self.segment_results_scroll, border_width=1)
+            row.pack(fill="x", padx=4, pady=3)
+            row.columnconfigure(1, weight=1)
+
+            # Colored left badge
+            badge = ctk.CTkFrame(row, width=5, height=36, fg_color=color)
+            badge.grid(row=0, column=0, padx=(4, 6), pady=4, sticky="ns")
+            badge.grid_propagate(False)
+
+            # Info area
+            info = ctk.CTkFrame(row, fg_color="transparent")
+            info.grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+
+            ctk.CTkLabel(
+                info, text=f"#{i + 1}", font=("Arial", 11, "bold"),
+                text_color=color, width=30, anchor="w"
+            ).pack(side="left")
+            ctk.CTkLabel(
+                info, text=f"[{seg.voice}]", font=("Arial", 10),
+                text_color=colors["text_secondary"], anchor="w"
+            ).pack(side="left", padx=(0, 6))
+            preview = seg.text[:45].replace("\n", " ") + ("..." if len(seg.text) > 45 else "")
+            ctk.CTkLabel(
+                info, text=preview, font=("Arial", 11), anchor="w"
+            ).pack(side="left", fill="x", expand=True)
+
+            # Buttons
+            btn_frame = ctk.CTkFrame(row, fg_color="transparent")
+            btn_frame.grid(row=0, column=2, padx=(4, 6), pady=4)
+
+            from core.audio_utils import AudioPlayer
+            player = AudioPlayer()
+            self.segment_regen_players[i] = player
+
+            play_btn = ctk.CTkButton(
+                btn_frame, text="\u25b6 Play", width=78, height=26
+            )
+            play_btn.configure(
+                command=lambda idx=i, pb=play_btn: self._play_segment(idx, pb)
+            )
+            play_btn.pack(side="left", padx=2)
+
+            regen_btn = ctk.CTkButton(
+                btn_frame, text="\u21ba Re-gen", width=88, height=26
+            )
+            regen_btn.configure(
+                command=lambda idx=i, rb=regen_btn: self._regenerate_segment(idx, rb)
+            )
+            regen_btn.pack(side="left", padx=2)
+
+        # Make the panel visible
+        self.segment_results_outer.pack(fill="both", expand=False, padx=10, pady=(0, 6))
+
+    def _play_segment(self, seg_idx: int, play_btn: ctk.CTkButton) -> None:
+        """Toggle playback for a specific generated segment."""
+        player = self.segment_regen_players.get(seg_idx)
+        if player is None:
+            return
+
+        if player.is_playing():
+            player.stop()
+            try:
+                if play_btn.winfo_exists():
+                    play_btn.configure(text="\u25b6 Play")
+            except Exception:
+                pass
+        else:
+            if not self.generated_segments or seg_idx >= len(self.generated_segments):
+                return
+            audio, sr = self.generated_segments[seg_idx]
+
+            def on_done():
+                try:
+                    if play_btn.winfo_exists():
+                        play_btn.configure(text="\u25b6 Play")
+                except Exception:
+                    pass
+
+            try:
+                if play_btn.winfo_exists():
+                    play_btn.configure(text="\u23f9 Stop")
+            except Exception:
+                pass
+            player.play(audio, sr, callback=on_done)
+
+    def _regenerate_segment(self, seg_idx: int, regen_btn: ctk.CTkButton) -> None:
+        """Re-generate a single segment and update the merged output file."""
+        if not self.generated_segments or seg_idx >= len(self.segments):
+            return
+
+        seg = self.segments[seg_idx]
+        voice_data = self.voice_library.get_voice_by_name(seg.voice)
+        if not voice_data:
+            messagebox.showerror("Error", f"Voice '{seg.voice}' not found in library.", parent=self)
+            return
+
+        regen_btn.configure(state="disabled", text="\u23f3 Generating...")
+        gen_params = self.config.get("generation_params", {})
+
+        def regen_task():
+            voice_type = voice_data.get("type")
+            if voice_type == "cloned":
+                if self.tts_engine.base_model is None:
+                    self.tts_engine.load_base_model(self.config.get("active_model", "1.7B"))
+                voice_prompt = self.voice_library.load_voice_clone_prompt(voice_data["id"])
+                wavs, sr = self.tts_engine.generate_voice_clone(
+                    text=seg.text,
+                    language=voice_data.get("language", "Auto"),
+                    voice_clone_prompt=voice_prompt,
+                    **gen_params
+                )
+            elif voice_type == "designed":
+                if self.tts_engine.voice_design_model is None:
+                    self.tts_engine.load_voice_design_model(self.config.get("active_model", "1.7B"))
+                wavs, sr = self.tts_engine.generate_voice_design(
+                    text=seg.text,
+                    language=voice_data.get("language", "Auto"),
+                    instruct=voice_data.get("description", ""),
+                    **gen_params
+                )
+            else:
+                raise ValueError(f"Unknown voice type: {voice_type}")
+
+            self.voice_library.increment_usage(voice_data["id"])
+            return wavs[0], sr
+
+        def on_regen_success(result):
+            new_audio, sr = result
+            self.generated_segments[seg_idx] = (new_audio, sr)
+
+            # Re-merge into a new incremented file, preserving previous versions
+            try:
+                audio_segs = [s[0] for s in self.generated_segments]
+                merged = merge_audio_segments(audio_segs, sr)
+
+                output_dir = self.last_output_path.parent
+                existing = list(output_dir.glob("narration_full_v*.wav"))
+                next_version = len(existing) + 2  # v2 on first regen, v3 next, etc.
+                new_path = output_dir / f"narration_full_v{next_version}.wav"
+                save_audio(merged, sr, str(new_path))
+                self.last_output_path = new_path
+
+                self.output_label.configure(
+                    text=f"Segment {seg_idx + 1} updated \u2192 {new_path}"
+                )
+                logger.info(f"Segment {seg_idx + 1} re-generated successfully, saved as {new_path.name}")
+            except Exception as e:
+                logger.error(f"Error saving re-generated audio: {e}")
+
+            try:
+                if regen_btn.winfo_exists():
+                    regen_btn.configure(state="normal", text="\u21ba Re-gen")
+            except Exception:
+                pass
+
+        def on_regen_error(err):
+            logger.error(f"Segment {seg_idx + 1} re-gen failed: {err}")
+            show_error_dialog(err, f"re-generating segment {seg_idx + 1}", self)
+            try:
+                if regen_btn.winfo_exists():
+                    regen_btn.configure(state="normal", text="\u21ba Re-gen")
+            except Exception:
+                pass
+
+        run_in_thread(self, regen_task, on_success=on_regen_success, on_error=on_regen_error)
+
+    # ------------------------------------------------------------------
+    # Narration session save / restore
+    # ------------------------------------------------------------------
+
+    def _save_session(self) -> None:
+        """Persist current transcript + voice assignments to disk."""
+        if not self.workspace_mgr:
+            return
+        try:
+            # Build voice-mapping by segment index (not segment_id) for stability
+            voice_mapping_names: dict = {}
+            for seg_idx, seg in enumerate(self.segments):
+                if seg_idx in self.voice_mapping:
+                    voice_mapping_names[str(seg_idx)] = self.voice_mapping[seg_idx]["name"]
+
+            speaker_assignments: dict = {}
+            if self.speaker_assignment_panel:
+                for speaker, vd in self.speaker_assignment_panel.get_assignments().items():
+                    speaker_assignments[speaker] = vd["name"]
+
+            session = {
+                "version": 1,
+                "transcript": self.transcript_textbox.get("1.0", "end-1c"),
+                "mode": self.mode_var.get(),
+                "voice_mapping": voice_mapping_names,
+                "speaker_assignments": speaker_assignments,
+                "selected_voice_name": (
+                    self.selected_voice_data["name"] if self.selected_voice_data else None
+                ),
+            }
+            self.workspace_mgr.save_narration_session(session)
+        except Exception as e:
+            logger.debug(f"Error saving narration session: {e}")
+
+    def _restore_session(self) -> None:
+        """Reload the last saved narration session into the UI."""
+        if not self.workspace_mgr:
+            return
+        try:
+            session = self.workspace_mgr.load_narration_session()
+            if not session:
+                return
+
+            transcript = session.get("transcript", "").strip()
+            mode = session.get("mode", "single")
+
+            if not transcript:
+                return
+
+            logger.info("Restoring narration session from disk...")
+
+            # Restore transcript text
+            self.transcript_textbox.delete("1.0", "end")
+            self.transcript_textbox.insert("1.0", transcript)
+            self.transcript_text = transcript
+
+            # Restore mode
+            self.mode_var.set(mode)
+
+            # For single mode the voice must be set before parsing
+            if mode == "single":
+                voice_name = session.get("selected_voice_name")
+                if voice_name:
+                    vd = self.voice_library.get_voice_by_name(voice_name)
+                    if vd:
+                        self.selected_voice_data = vd
+
+            # Parse to rebuild self.segments and mode-specific UI
+            self._parse_transcript(show_messages=False)
+
+            # Apply voice mappings (manual mode)
+            if mode == "manual":
+                for seg_idx_str, voice_name in session.get("voice_mapping", {}).items():
+                    try:
+                        seg_idx = int(seg_idx_str)
+                        if seg_idx < len(self.segments):
+                            vd = self.voice_library.get_voice_by_name(voice_name)
+                            if vd:
+                                self._on_segment_voice_assigned(
+                                    self.segments[seg_idx].segment_id, vd
+                                )
+                    except (ValueError, IndexError):
+                        pass
+
+            # Apply speaker assignments (annotated mode)
+            elif mode == "annotated":
+                if self.speaker_assignment_panel:
+                    for speaker, voice_name in session.get("speaker_assignments", {}).items():
+                        vd = self.voice_library.get_voice_by_name(voice_name)
+                        if vd:
+                            self.speaker_assignment_panel.set_assignment(speaker, vd)
+
+            logger.info("Narration session restored successfully")
+        except Exception as e:
+            logger.error(f"Error restoring narration session: {e}")

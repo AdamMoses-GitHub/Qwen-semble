@@ -319,3 +319,47 @@ class WorkspaceManager:
         recommended_gb = 5.0  # Recommended for comfortable use
         
         return minimum_gb, recommended_gb
+
+    # ------------------------------------------------------------------
+    # Narration session persistence
+    # ------------------------------------------------------------------
+
+    def get_narration_session_file(self) -> Path:
+        """Get path to narration session file.
+
+        Returns:
+            Path to narration_session.json inside the workspace
+        """
+        return self.get_working_directory() / "narration_session.json"
+
+    def save_narration_session(self, session_data: dict) -> None:
+        """Persist narration session state to disk.
+
+        Args:
+            session_data: Dictionary with transcript, mode, assignments, etc.
+        """
+        session_file = self.get_narration_session_file()
+        try:
+            with open(session_file, 'w', encoding='utf-8') as f:
+                json.dump(session_data, f, indent=2, ensure_ascii=False)
+            logger.debug("Narration session saved")
+        except Exception as e:
+            logger.error(f"Failed to save narration session: {e}")
+
+    def load_narration_session(self) -> Optional[dict]:
+        """Load narration session state from disk.
+
+        Returns:
+            Session data dictionary, or None if no session file exists
+        """
+        session_file = self.get_narration_session_file()
+        if not session_file.exists():
+            return None
+        try:
+            with open(session_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            logger.debug("Narration session loaded")
+            return data
+        except Exception as e:
+            logger.error(f"Failed to load narration session: {e}")
+            return None

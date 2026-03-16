@@ -204,6 +204,8 @@ class VoiceCard(ctk.CTkFrame):
 
 class VoiceBrowserWidget(ctk.CTkToplevel):
     """Advanced voice browser with search, filter, and preview."""
+
+    _last_position: Optional[tuple] = None  # (x, y) remembered across instances
     
     def __init__(
         self,
@@ -256,11 +258,18 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         self._create_ui()
         self._populate_voices()
         
-        # Center on parent
+        # Restore last position, or center on parent if none saved
         self.update_idletasks()
-        x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
-        y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
-        self.geometry(f"+{x}+{y}")
+        if VoiceBrowserWidget._last_position is not None:
+            x, y = VoiceBrowserWidget._last_position
+            self.geometry(f"+{x}+{y}")
+        else:
+            x = parent.winfo_x() + (parent.winfo_width() - self.winfo_width()) // 2
+            y = parent.winfo_y() + (parent.winfo_height() - self.winfo_height()) // 2
+            self.geometry(f"+{x}+{y}")
+
+        # Save position when window is closed
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
     
     def _create_ui(self) -> None:
         """Create browser UI."""
@@ -508,13 +517,27 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
             logger.error(f"Failed to preview voice: {e}")
             messagebox.showerror("Preview Error", f"Failed to preview voice:\n{e}")
     
+    def _save_position(self) -> None:
+        """Remember current window position for next open."""
+        try:
+            VoiceBrowserWidget._last_position = (self.winfo_x(), self.winfo_y())
+        except Exception:
+            pass
+
+    def _on_close(self) -> None:
+        """Handle window close via title-bar X."""
+        self._save_position()
+        self.destroy()
+
     def _on_confirm(self) -> None:
         """Confirm selection and close."""
         if self.selected_voice_data:
             if self.on_select_callback:
                 self.on_select_callback(self.selected_voice_data)
-            self.destroy()
+        self._save_position()
+        self.destroy()
     
     def _on_cancel(self) -> None:
         """Cancel selection and close."""
+        self._save_position()
         self.destroy()

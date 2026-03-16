@@ -32,6 +32,7 @@ class SettingsTab(ctk.CTkFrame):
         self.active_model_frame = None
         self.active_model_combo = None
         self.active_model_var = None
+        self.loaded_models_frame = None
         
         self._create_ui()
         
@@ -149,6 +150,9 @@ class SettingsTab(ctk.CTkFrame):
             variable=self.flash_var
         )
         flash_check.pack(side="left", padx=5)
+
+        # Loaded models / VRAM management
+        self._create_loaded_models_section(section)
     
     def _create_model_status_labels(self, parent, downloaded_models: list) -> None:
         """Create status labels for installed models.
@@ -229,6 +233,146 @@ class SettingsTab(ctk.CTkFrame):
         )
         status_0_6b.pack(side="left")
     
+    def _create_loaded_models_section(self, parent) -> None:
+        """Create collapsible section showing which models are in memory."""
+        frame = ctk.CTkFrame(parent)
+        frame.pack(fill="x", padx=10, pady=(5, 10))
+        self.loaded_models_frame = frame
+        self._refresh_loaded_models_section()
+
+    def _refresh_loaded_models_section(self) -> None:
+        """Rebuild the loaded-models display from current engine state."""
+        if not self.loaded_models_frame or not self.loaded_models_frame.winfo_exists():
+            return
+
+        for w in self.loaded_models_frame.winfo_children():
+            w.destroy()
+
+        colors = get_theme_colors()
+
+        # Header row
+        header_row = ctk.CTkFrame(self.loaded_models_frame, fg_color="transparent")
+        header_row.pack(fill="x", padx=5, pady=(8, 4))
+
+        ctk.CTkLabel(
+            header_row,
+            text="Loaded Models (Memory Management)",
+            font=("Arial", 12, "bold")
+        ).pack(side="left")
+
+        # VRAM / RAM usage badge
+        try:
+            import torch
+            if "cuda" in self.tts_engine.device and torch.cuda.is_available():
+                alloc = torch.cuda.memory_allocated() / 1024 ** 3
+                total = torch.cuda.get_device_properties(0).total_memory / 1024 ** 3
+                mem_text = f"VRAM: {alloc:.1f} / {total:.1f} GB used"
+                mem_color = colors["error_text"] if alloc / total > 0.85 else colors["text_secondary"]
+            else:
+                mem_text = "CPU mode (system RAM)"
+                mem_color = colors["text_secondary"]
+        except Exception:
+            mem_text = ""
+            mem_color = colors["text_secondary"]
+
+        ctk.CTkLabel(
+            header_row,
+            text=mem_text,
+            font=("Arial", 10),
+            text_color=mem_color
+        ).pack(side="right", padx=5)
+
+        # Per-model rows
+        model_defs = [
+            ("custom_voice", "CustomVoice",   self.tts_engine.custom_voice_model),
+            ("voice_design", "VoiceDesign",    self.tts_engine.voice_design_model),
+            ("base",          "Base",           self.tts_engine.base_model),
+        ]
+        any_loaded = False
+        for model_key, model_label, model_instance in model_defs:
+            row = ctk.CTkFrame(self.loaded_models_frame, fg_color="transparent")
+            row.pack(fill="x", padx=5, pady=2)
+
+            if model_instance is not None:
+                status_text  = "● Loaded"
+                status_color = colors["success_text"]
+                btn_state    = "normal"
+                any_loaded   = True
+            else:
+                status_text  = "○ Not loaded"
+                status_color = colors["text_secondary"]
+                btn_state    = "disabled"
+
+            ctk.CTkLabel(
+                row,
+                text=f"  {model_label}:",
+                font=("Arial", 12),
+                width=120,
+                anchor="w"
+            ).pack(side="left")
+            ctk.CTkLabel(
+                row,
+                text=status_text,
+                font=("Arial", 12, "bold"),
+                text_color=status_color
+            ).pack(side="left", padx=(0, 10))
+
+            ctk.CTkButton(
+                row,
+                text="Unload",
+                width=80,
+                height=26,
+                state=btn_state,
+                fg_color="#7f1d1d",
+                hover_color="#991b1b",
+                command=lambda mk=model_key, ml=model_label: self._unload_model(mk, ml)
+            ).pack(side="right", padx=5)
+
+        # Unload-all button
+        bottom = ctk.CTkFrame(self.loaded_models_frame, fg_color="transparent")
+        bottom.pack(fill="x", padx=5, pady=(4, 8))
+        ctk.CTkButton(
+            bottom,
+            text="Unload All Models",
+            width=160,
+            height=30,
+            fg_color="#7f1d1d",
+            hover_color="#991b1b",
+            state="normal" if any_loaded else "disabled",
+            command=self._unload_all_models
+        ).pack(side="right", padx=5)
+
+        ctk.CTkLabel(
+            bottom,
+            text="Free VRAM without restarting the app",
+            font=("Arial", 10),
+            text_color=colors["text_secondary"]
+        ).pack(side="left", padx=5)
+
+    def _unload_model(self, model_key: str, model_label: str) -> None:
+        """Unload a specific model to free memory."""
+        if not messagebox.askyesno(
+            "Unload Model",
+            f"Unload {model_label} model?\n\n"
+            "This frees VRAM/RAM. The model will be reloaded automatically next time it is needed.\n\nContinue?"
+        ):
+            return
+        self.tts_engine.unload_model(model_key)
+        logger.info(f"User unloaded {model_label} model from settings")
+        self._refresh_loaded_models_section()
+
+    def _unload_all_models(self) -> None:
+        """Unload all loaded models to free memory."""
+        if not messagebox.askyesno(
+            "Unload All Models",
+            "Unload all currently loaded models?\n\n"
+            "This frees all model memory. Models will reload automatically on next use.\n\nContinue?"
+        ):
+            return
+        self.tts_engine.unload_all_models()
+        logger.info("User unloaded all models from settings")
+        self._refresh_loaded_models_section()
+
     def _create_active_model_switcher(self, parent) -> None:
         """Create active model switcher (always visible)."""
         downloaded_models = self.config.get("downloaded_models", [])
