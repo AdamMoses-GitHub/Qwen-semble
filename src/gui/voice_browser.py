@@ -240,6 +240,8 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         self.selected_voice_data = None  # Store full voice data
         self.filter_type = "all"  # all, cloned, designed
         self.search_query = ""
+        self.sort_field = "name"   # name | created | last_used
+        self.sort_ascending = True
         self.voice_cards = {}  # voice_name -> VoiceCard widget
         self.voice_data_map = {}  # voice_name -> voice_data dict
         
@@ -331,7 +333,33 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         # Voice count label
         self.count_label = ctk.CTkLabel(filter_frame, text="", font=("Arial", 10))
         self.count_label.pack(side="right", padx=10)
-        
+
+        # Sort controls
+        sort_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
+        sort_frame.pack(fill="x", pady=(6, 0))
+
+        ctk.CTkLabel(sort_frame, text="Sort:").pack(side="left", padx=(0, 10))
+
+        self.sort_btns = {}
+        for field, label in [("name", "Name"), ("created", "Created"), ("last_used", "Last Used")]:
+            btn = ctk.CTkButton(
+                sort_frame,
+                text=label,
+                command=lambda f=field: self._set_sort_field(f),
+                width=90,
+                fg_color="green" if field == self.sort_field else "gray",
+            )
+            btn.pack(side="left", padx=2)
+            self.sort_btns[field] = btn
+
+        self.sort_dir_btn = ctk.CTkButton(
+            sort_frame,
+            text="↑ Asc",
+            command=self._toggle_sort_direction,
+            width=72,
+        )
+        self.sort_dir_btn.pack(side="left", padx=(10, 0))
+
         # Scrollable voice list
         self.voice_list_frame = ctk.CTkScrollableFrame(self)
         self.voice_list_frame.pack(fill="both", expand=True, padx=10, pady=(0, 10))
@@ -395,8 +423,22 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
                 or any(query_lower in tag.lower() for tag in v.get("tags", []))
             ]
         
-        # Sort by usage, then name
-        all_voices.sort(key=lambda v: (-v.get("usage_count", 0), v["name"]))
+        # Dynamic sort
+        if self.sort_field == "name":
+            all_voices.sort(
+                key=lambda v: v["name"].lower(),
+                reverse=not self.sort_ascending,
+            )
+        elif self.sort_field == "created":
+            all_voices.sort(
+                key=lambda v: v.get("created") or "",
+                reverse=not self.sort_ascending,
+            )
+        else:  # last_used
+            all_voices.sort(
+                key=lambda v: v.get("last_used") or "",
+                reverse=not self.sort_ascending,
+            )
         
         # Update count
         self.count_label.configure(text=f"{len(all_voices)} voice{'s' if len(all_voices) != 1 else ''}")
@@ -442,6 +484,19 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
         """Clear search."""
         self.search_entry.delete(0, "end")
         self.search_query = ""
+        self._populate_voices()
+
+    def _set_sort_field(self, field: str) -> None:
+        """Set the sort field and re-populate."""
+        self.sort_field = field
+        for f, btn in self.sort_btns.items():
+            btn.configure(fg_color="green" if f == field else "gray")
+        self._populate_voices()
+
+    def _toggle_sort_direction(self) -> None:
+        """Flip sort direction and re-populate."""
+        self.sort_ascending = not self.sort_ascending
+        self.sort_dir_btn.configure(text="↑ Asc" if self.sort_ascending else "↓ Desc")
         self._populate_voices()
     
     def _set_filter(self, filter_type: str) -> None:
@@ -532,6 +587,11 @@ class VoiceBrowserWidget(ctk.CTkToplevel):
     def _on_confirm(self) -> None:
         """Confirm selection and close."""
         if self.selected_voice_data:
+            # Record the selection as a usage event so last_used stays current
+            try:
+                self.voice_library.increment_usage(self.selected_voice_data["id"])
+            except Exception:
+                pass
             if self.on_select_callback:
                 self.on_select_callback(self.selected_voice_data)
         self._save_position()

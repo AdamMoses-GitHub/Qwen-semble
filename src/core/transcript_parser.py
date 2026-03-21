@@ -13,6 +13,7 @@ class TranscriptSegment:
     text: str
     voice: Optional[str] = None
     segment_id: int = 0
+    instruct: str = ""
 
 
 class TranscriptParser:
@@ -29,6 +30,13 @@ class TranscriptParser:
     SPEAKER_PATTERN = re.compile(
         r'(?:\[(?:Speaker:\s*)?([^\]]+)\]|\(([^)]+)\)|^([A-Za-z][A-Za-z\s]+):)',
         re.UNICODE | re.MULTILINE
+    )
+
+    # Inline style/emotion tag: [style: ...], [instruct: ...], [emotion: ...]
+    # Matched at the very start of a segment's text.
+    INSTRUCT_TAG_PATTERN = re.compile(
+        r'^\[(?:style|instruct|emotion):\s*([^\]]+)\]\s*',
+        re.IGNORECASE
     )
     
     def __init__(self):
@@ -58,15 +66,24 @@ class TranscriptParser:
         logger.debug(f"Parsing transcript in {mode} mode, text length: {len(text)}")
         
         if mode == "single":
-            return self._parse_single(text, default_voice)
+            segments = self._parse_single(text, default_voice)
         elif mode == "manual":
-            return self._parse_manual(text)
+            segments = self._parse_manual(text)
         elif mode == "annotated":
-            return self._parse_annotated(text, default_voice)
+            segments = self._parse_annotated(text, default_voice)
         elif mode == "paragraphs":
-            return self._parse_paragraphs(text)
+            segments = self._parse_paragraphs(text)
         else:
             raise ValueError(f"Unknown parsing mode: {mode}")
+
+        # Extract any inline [style: ...] / [instruct: ...] / [emotion: ...] tags
+        for seg in segments:
+            m = self.INSTRUCT_TAG_PATTERN.match(seg.text)
+            if m:
+                seg.instruct = m.group(1).strip()
+                seg.text = seg.text[m.end():].strip()
+
+        return segments
     
     def _parse_single(self, text: str, voice: Optional[str]) -> List[TranscriptSegment]:
         """Parse entire text as single segment.

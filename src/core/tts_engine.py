@@ -461,6 +461,7 @@ class TTSEngine:
         ref_text: Optional[str] = None,
         voice_clone_prompt: Optional[Any] = None,
         x_vector_only_mode: bool = False,
+        instruct: str = "",
         **generation_kwargs
     ) -> Tuple[List[np.ndarray], int]:
         """Generate speech using Base model with voice cloning.
@@ -481,6 +482,15 @@ class TTSEngine:
             raise GenerationError("Base model not loaded. Call load_base_model() first.")
         
         try:
+            # Prepend style/emotion direction as a parenthetical when provided.
+            # The Base model has no dedicated instruct field, but it follows
+            # natural-language cues embedded at the start of the text.
+            if instruct:
+                if isinstance(text, list):
+                    text = [f"({instruct}) {t}" for t in text]
+                else:
+                    text = f"({instruct}) {text}"
+
             text_preview = text[:100] if isinstance(text, str) else str(text)[:100]
             logger.info(f"Generating voice clone audio: text_length={len(text)}, x_vector_only={x_vector_only_mode}")
             logger.debug(f"Text preview: '{text_preview}...'")

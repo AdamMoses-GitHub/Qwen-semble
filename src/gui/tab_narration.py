@@ -1092,6 +1092,7 @@ class NarrationTab(ctk.CTkFrame):
                                 text=text,
                                 language=voice_data.get("language", "Auto"),
                                 voice_clone_prompt=voice_prompt,
+                                instruct=segment.instruct,
                                 **gen_params
                             )
                             logger.debug(f"Cloned voice generation successful")
@@ -1113,10 +1114,14 @@ class NarrationTab(ctk.CTkFrame):
                                 self.tts_engine.load_voice_design_model(model_size)
                             
                             # Generate with voice design
+                            # Combine per-segment style with the voice's base description
+                            _base_desc = voice_data.get("description", "")
+                            _seg_style = segment.instruct
+                            _combined = ". ".join(p for p in [_seg_style, _base_desc] if p)
                             wavs, sr = self.tts_engine.generate_voice_design(
                                 text=text,
                                 language=voice_data.get("language", "Auto"),
-                                instruct=voice_data.get("description", ""),
+                                instruct=_combined,
                                 **gen_params
                             )
                             logger.debug(f"Designed voice generation successful")
@@ -1415,14 +1420,14 @@ class NarrationTab(ctk.CTkFrame):
             row.pack(fill="x", padx=4, pady=3)
             row.columnconfigure(1, weight=1)
 
-            # Colored left badge
-            badge = ctk.CTkFrame(row, width=5, height=36, fg_color=color)
-            badge.grid(row=0, column=0, padx=(4, 6), pady=4, sticky="ns")
+            # Colored left badge — spans both content rows
+            badge = ctk.CTkFrame(row, width=5, fg_color=color)
+            badge.grid(row=0, column=0, rowspan=2, padx=(4, 6), pady=4, sticky="ns")
             badge.grid_propagate(False)
 
             # Info area
             info = ctk.CTkFrame(row, fg_color="transparent")
-            info.grid(row=0, column=1, sticky="ew", padx=4, pady=4)
+            info.grid(row=0, column=1, sticky="ew", padx=4, pady=(4, 0))
 
             ctk.CTkLabel(
                 info, text=f"#{i + 1}", font=("Arial", 11, "bold"),
@@ -1437,9 +1442,33 @@ class NarrationTab(ctk.CTkFrame):
                 info, text=preview, font=("Arial", 11), anchor="w"
             ).pack(side="left", fill="x", expand=True)
 
+            # Style override row — lets users set per-segment emotion/instruct
+            style_row = ctk.CTkFrame(row, fg_color="transparent")
+            style_row.grid(row=1, column=1, columnspan=2, sticky="ew", padx=(4, 6), pady=(0, 4))
+            ctk.CTkLabel(
+                style_row, text="Style:", font=("Arial", 10),
+                text_color=colors["text_secondary"], width=38, anchor="w"
+            ).pack(side="left")
+            style_entry = ctk.CTkEntry(
+                style_row,
+                placeholder_text="e.g. speak laughingly, warm and angry...",
+                height=24,
+                font=("Arial", 10),
+            )
+            style_entry.pack(side="left", fill="x", expand=True)
+            if seg.instruct:
+                style_entry.insert(0, seg.instruct)
+
+            def _on_style_change(event=None, idx=i, entry=style_entry):
+                if idx < len(self.segments):
+                    self.segments[idx].instruct = entry.get().strip()
+
+            style_entry.bind("<FocusOut>", _on_style_change)
+            style_entry.bind("<Return>", _on_style_change)
+
             # Buttons
             btn_frame = ctk.CTkFrame(row, fg_color="transparent")
-            btn_frame.grid(row=0, column=2, padx=(4, 6), pady=4)
+            btn_frame.grid(row=0, column=2, padx=(4, 6), pady=(4, 0))
 
             from core.audio_utils import AudioPlayer
             player = AudioPlayer()
@@ -1520,15 +1549,18 @@ class NarrationTab(ctk.CTkFrame):
                     text=seg.text,
                     language=voice_data.get("language", "Auto"),
                     voice_clone_prompt=voice_prompt,
+                    instruct=seg.instruct,
                     **gen_params
                 )
             elif voice_type == "designed":
                 if self.tts_engine.voice_design_model is None:
                     self.tts_engine.load_voice_design_model(self.config.get("active_model", "1.7B"))
+                _base_desc = voice_data.get("description", "")
+                _combined = ". ".join(p for p in [seg.instruct, _base_desc] if p)
                 wavs, sr = self.tts_engine.generate_voice_design(
                     text=seg.text,
                     language=voice_data.get("language", "Auto"),
-                    instruct=voice_data.get("description", ""),
+                    instruct=_combined,
                     **gen_params
                 )
             else:
@@ -1592,6 +1624,13 @@ class NarrationTab(ctk.CTkFrame):
                 if seg_idx in self.voice_mapping:
                     voice_mapping_names[str(seg_idx)] = self.voice_mapping[seg_idx]["name"]
 
+            # Build per-segment instruct overrides
+            segment_instructs: dict = {
+                str(idx): seg.instruct
+                for idx, seg in enumerate(self.segments)
+                if seg.instruct
+            }
+
             speaker_assignments: dict = {}
             if self.speaker_assignment_panel:
                 for speaker, vd in self.speaker_assignment_panel.get_assignments().items():
@@ -1603,6 +1642,7 @@ class NarrationTab(ctk.CTkFrame):
                 "mode": self.mode_var.get(),
                 "voice_mapping": voice_mapping_names,
                 "speaker_assignments": speaker_assignments,
+                "segment_instructs": segment_instructs,
                 "selected_voice_name": (
                     self.selected_voice_data["name"] if self.selected_voice_data else None
                 ),
@@ -1668,6 +1708,15 @@ class NarrationTab(ctk.CTkFrame):
                         vd = self.voice_library.get_voice_by_name(voice_name)
                         if vd:
                             self.speaker_assignment_panel.set_assignment(speaker, vd)
+
+            # Restore per-segment instruct overrides
+            for seg_idx_str, instruct_val in session.get("segment_instructs", {}).items():
+                try:
+                    seg_idx = int(seg_idx_str)
+                    if seg_idx < len(self.segments):
+                        self.segments[seg_idx].instruct = instruct_val
+                except (ValueError, IndexError):
+                    pass
 
             logger.info("Narration session restored successfully")
         except Exception as e:
